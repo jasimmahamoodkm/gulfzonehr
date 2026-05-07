@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
-import { Plus, Download, DollarSign } from 'lucide-react';
+import { Plus, Download } from 'lucide-react';
 
 const PayrollPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);

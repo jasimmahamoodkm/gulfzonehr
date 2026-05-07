@@ -12,7 +12,6 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  ChevronDown,
   Menu,
   X,
 } from 'lucide-react';
@@ -31,7 +30,6 @@ const menuItems = [
 const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
 

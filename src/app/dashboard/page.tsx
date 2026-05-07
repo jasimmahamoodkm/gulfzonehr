@@ -7,7 +7,6 @@ import Button from '@/components/ui/Button';
 import {
   Users,
   Building2,
-  TrendingUp,
   Calendar,
   BarChart3,
   Clock,

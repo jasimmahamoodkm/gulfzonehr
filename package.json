@@ -10,7 +10,12 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit"
   },
-  "keywords": ["HR", "HR Management", "Employee Management", "GulfZone"],
+  "keywords": [
+    "HR",
+    "HR Management",
+    "Employee Management",
+    "GulfZone"
+  ],
   "author": "GulfZone Group",
   "license": "MIT",
   "dependencies": {
@@ -30,5 +35,8 @@
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4"
   }
 }

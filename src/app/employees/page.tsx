@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -111,7 +110,7 @@ const EmployeesPage: React.FC = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: (value: any, row: any) => (
+      render: (_: any, __: any) => (
         <div className="flex gap-2">
           <button className="p-1 hover:bg-gray-200 rounded transition">
             <Eye size={18} className="text-blue-600" />

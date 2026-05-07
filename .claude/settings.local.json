@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(cat)",
+      "Bash(chmod +x /tmp/qa_test.sh)",
+      "Bash(/tmp/qa_test.sh)",
+      "Bash(chmod +x /tmp/qa_features.sh)",
+      "Bash(/tmp/qa_features.sh)",
+      "Bash(chmod +x /tmp/qa_detailed.sh)",
+      "Bash(/tmp/qa_detailed.sh)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix: resolve TypeScript configuration and Tailwind CSS v4 compatibility issues *)"
+    ]
+  }
+}

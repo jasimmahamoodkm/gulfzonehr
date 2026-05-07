@@ -1,14 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { Download, Filter, BarChart3 } from 'lucide-react';
 
 const ReportsPage: React.FC = () => {
-  const [selectedReport, setSelectedReport] = useState('');
-
   const reports = [
     {
       id: 'employee-summary',
