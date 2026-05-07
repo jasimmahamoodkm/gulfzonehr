@@ -1,0 +1,34 @@
+{
+  "name": "gulfzonehr",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["HR", "HR Management", "Employee Management", "GulfZone"],
+  "author": "GulfZone Group",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.5.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.14.0",
+    "next": "^16.2.5",
+    "postcss": "^8.5.14",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-hook-form": "^7.75.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "zod": "^4.4.3"
+  }
+}
