@@ -3,18 +3,70 @@
 import React, { useState } from 'react';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { Save, Lock, Bell, Shield } from 'lucide-react';
+import { Lock, Bell, Shield } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const passwordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+type PasswordFormData = z.infer<typeof passwordSchema>;
 
 const SettingsPage: React.FC = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
+  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<PasswordFormData>({
+    resolver: zodResolver(passwordSchema),
+  });
 
   const tabs = [
     { id: 'profile', label: 'Profile Settings', icon: Shield },
     { id: 'security', label: 'Security', icon: Lock },
     { id: 'notifications', label: 'Notifications', icon: Bell },
   ];
+
+  const { updatePassword } = useAuth();
+
+  const onPasswordSubmit = async (data: PasswordFormData) => {
+    try {
+      setIsUpdatingPassword(true);
+      setPasswordMessage(null);
+
+      await updatePassword(data.currentPassword, data.newPassword);
+
+      setPasswordMessage({
+        type: 'success',
+        message: 'Password updated successfully',
+      });
+      reset();
+    } catch (error: any) {
+      setPasswordMessage({
+        type: 'error',
+        message: error.message || 'Failed to update password. Please try again.',
+      });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
 
   return (
     <Layout>
@@ -52,47 +104,31 @@ const SettingsPage: React.FC = () => {
             <Card header={<h2 className="text-lg font-semibold">Personal Information</h2>}>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <Input label="First Name" defaultValue="Jasim" />
-                  <Input label="Last Name" defaultValue="Mahmood" />
+                  <Input label="First Name" defaultValue={user?.first_name || ''} readOnly />
+                  <Input label="Last Name" defaultValue={user?.last_name || ''} readOnly />
                 </div>
-                <Input label="Email Address" type="email" defaultValue="jasim@gulfzone.com" />
-                <Input label="Phone Number" defaultValue="+971-50-123-4567" />
+                <Input label="Email Address" type="email" defaultValue={user?.email || ''} readOnly />
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50">
-                    <option>Administrator</option>
-                    <option disabled>Manager</option>
-                    <option disabled>Employee</option>
+                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" disabled>
+                    <option>{user?.role || 'User'}</option>
                   </select>
                 </div>
-                <div className="flex gap-3 pt-4">
-                  <Button variant="primary" className="gap-2">
-                    <Save size={20} />
-                    Save Changes
-                  </Button>
-                  <Button variant="secondary">Cancel</Button>
-                </div>
+                <p className="text-sm text-gray-600">Profile information is managed by administrators.</p>
               </div>
             </Card>
 
             <Card header={<h2 className="text-lg font-semibold">Organization Settings</h2>}>
               <div className="space-y-4">
-                <Input label="Organization Name" defaultValue="GulfZone Group" />
-                <Input label="Default Currency" defaultValue="AED (UAE Dirham)" />
+                <Input label="Organization Name" defaultValue="GulfZone Group" readOnly />
+                <Input label="Default Currency" defaultValue="AED (UAE Dirham)" readOnly />
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Default Timezone</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" disabled>
                     <option>Asia/Dubai (GST)</option>
                     <option>Asia/Riyadh (AST)</option>
                     <option>UTC</option>
                   </select>
-                </div>
-                <div className="flex gap-3 pt-4">
-                  <Button variant="primary" className="gap-2">
-                    <Save size={20} />
-                    Save Changes
-                  </Button>
-                  <Button variant="secondary">Cancel</Button>
                 </div>
               </div>
             </Card>
@@ -104,13 +140,66 @@ const SettingsPage: React.FC = () => {
           <div className="space-y-6">
             <Card header={<h2 className="text-lg font-semibold">Password</h2>}>
               <div className="space-y-4">
-                <Input label="Current Password" type="password" />
-                <Input label="New Password" type="password" />
-                <Input label="Confirm Password" type="password" />
-                <div className="flex gap-3 pt-4">
-                  <Button variant="primary">Update Password</Button>
-                  <Button variant="secondary">Cancel</Button>
-                </div>
+                {passwordMessage && (
+                  <div className={`p-4 rounded-lg ${
+                    passwordMessage.type === 'success'
+                      ? 'bg-green-50 border border-green-200 text-green-700'
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {passwordMessage.message}
+                  </div>
+                )}
+                <form onSubmit={handleSubmit(onPasswordSubmit)} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                    <input
+                      {...register('currentPassword')}
+                      type="password"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {errors.currentPassword && (
+                      <p className="mt-1 text-sm text-red-600">{errors.currentPassword.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                    <input
+                      {...register('newPassword')}
+                      type="password"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {errors.newPassword && (
+                      <p className="mt-1 text-sm text-red-600">{errors.newPassword.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                    <input
+                      {...register('confirmPassword')}
+                      type="password"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {errors.confirmPassword && (
+                      <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="submit"
+                      disabled={isUpdatingPassword}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition"
+                    >
+                      {isUpdatingPassword ? 'Updating...' : 'Update Password'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => reset()}
+                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
               </div>
             </Card>
 
@@ -122,22 +211,22 @@ const SettingsPage: React.FC = () => {
                     Two-factor authentication is currently <span className="font-semibold">disabled</span>
                   </p>
                 </div>
-                <Button variant="primary">Enable 2FA</Button>
+                <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                  Enable 2FA
+                </button>
               </div>
             </Card>
 
             <Card header={<h2 className="text-lg font-semibold">Active Sessions</h2>}>
               <div className="space-y-3">
                 {[
-                  { device: 'MacBook Pro', location: 'Dubai, UAE', lastActive: '2 minutes ago' },
-                  { device: 'iPhone 13', location: 'Dubai, UAE', lastActive: '1 hour ago' },
+                  { device: 'Current Session', location: 'Dubai, UAE', lastActive: 'now' },
                 ].map((session, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium text-gray-900">{session.device}</p>
                       <p className="text-sm text-gray-600">{session.location} • {session.lastActive}</p>
                     </div>
-                    <Button variant="outline" size="sm">Sign Out</Button>
                   </div>
                 ))}
               </div>
@@ -166,8 +255,12 @@ const SettingsPage: React.FC = () => {
                   </label>
                 ))}
                 <div className="flex gap-3 pt-4">
-                  <Button variant="primary">Save Preferences</Button>
-                  <Button variant="secondary">Reset to Default</Button>
+                  <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                    Save Preferences
+                  </button>
+                  <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
+                    Reset to Default
+                  </button>
                 </div>
               </div>
             </Card>
@@ -181,8 +274,12 @@ const SettingsPage: React.FC = () => {
                   <span className="text-sm text-gray-700">Enable SMS notifications</span>
                 </label>
                 <div className="flex gap-3 pt-4">
-                  <Button variant="primary">Update Settings</Button>
-                  <Button variant="secondary">Cancel</Button>
+                  <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                    Update Settings
+                  </button>
+                  <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
+                    Cancel
+                  </button>
                 </div>
               </div>
             </Card>

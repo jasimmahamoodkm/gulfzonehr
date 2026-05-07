@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { CompanyProvider } from '@/context/CompanyContext';
+import { AuthProvider } from '@/context/AuthContext';
 import '../styles/globals.css';
 
 export const metadata: Metadata = {
@@ -16,7 +18,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <AuthProvider>
+          <CompanyProvider>{children}</CompanyProvider>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

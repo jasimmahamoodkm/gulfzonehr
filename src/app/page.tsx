@@ -1,9 +1,7 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import Layout from '@/components/layout/Layout';
-import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { Users, Building2, Calendar, TrendingUp } from 'lucide-react';
 
@@ -56,7 +54,7 @@ const Home: React.FC = () => {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Quick Actions */}
-          <Card
+          {/* <Card
             header={<h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>}
             className="lg:col-span-1"
           >
@@ -82,7 +80,7 @@ const Home: React.FC = () => {
                 </Button>
               </Link>
             </div>
-          </Card>
+          </Card> */}
 
           {/* Recent Activities */}
           <Card

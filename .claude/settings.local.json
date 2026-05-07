@@ -11,7 +11,29 @@
       "Bash(chmod +x /tmp/qa_detailed.sh)",
       "Bash(/tmp/qa_detailed.sh)",
       "Bash(git add *)",
-      "Bash(git commit -m 'fix: resolve TypeScript configuration and Tailwind CSS v4 compatibility issues *)"
+      "Bash(git commit -m 'fix: resolve TypeScript configuration and Tailwind CSS v4 compatibility issues *)",
+      "Bash(pkill -f \"next.*dev\")",
+      "Bash(chmod +x /tmp/qa_test_plan.sh)",
+      "Bash(/tmp/qa_test_plan.sh)",
+      "mcp__Claude_Preview__preview_start",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(chmod +x /tmp/comprehensive_qa_test.sh)",
+      "Bash(/tmp/comprehensive_qa_test.sh)",
+      "Bash(curl -s \"http://localhost:3000/dashboard\")",
+      "Bash(curl -s \"http://localhost:3000/reports\")",
+      "Bash(chmod +x /tmp/detailed_crud_test.sh)",
+      "Bash(/tmp/detailed_crud_test.sh)",
+      "Bash(curl -s \"http://localhost:3000/leave\")",
+      "Bash(curl -s \"http://localhost:3000/payroll\")",
+      "Bash(curl -s \"http://localhost:3000/employees\")",
+      "Bash(npm list *)",
+      "Bash(npm install *)",
+      "Bash([ -f \"/Users/jasimmahmood/Documents/Jasim Mahmood/Projects/ClaudeWorks/GulfZoneHR/$file\" ])",
+      "Bash(timeout 5 curl -s http://localhost:3000/login)",
+      "Bash(curl -s http://localhost:52229/login)",
+      "mcp__02014205-d1e3-4805-8237-552cce494442__list_projects",
+      "mcp__02014205-d1e3-4805-8237-552cce494442__execute_sql",
+      "mcp__02014205-d1e3-4805-8237-552cce494442__apply_migration"
     ]
   }
 }

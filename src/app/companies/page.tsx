@@ -1,63 +1,166 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
 import Table from '@/components/ui/Table';
 import { Plus, Edit, Trash2, MapPin, Phone, Mail } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+const companySchema = z.object({
+  name: z.string().min(2, 'Company name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  phone: z.string().min(7, 'Phone number must be at least 7 characters'),
+  industry: z.string().min(2, 'Industry is required'),
+  city: z.string().min(2, 'City is required'),
+  country: z.string().min(2, 'Country is required'),
+  founded_year: z.number().min(1900, 'Founded year must be valid'),
+  address: z.string().min(5, 'Address must be at least 5 characters'),
+});
+
+type CompanyFormData = z.infer<typeof companySchema>;
 
 const CompaniesPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
-  const companies = [
-    {
-      id: '1',
-      name: 'GulfZone Tech',
-      email: 'info@tech.gulfzone.com',
-      phone: '+971-4-123-4567',
-      industry: 'Information Technology',
-      city: 'Dubai',
-      country: 'UAE',
-      employee_count: 320,
-      founded_year: 2015,
-    },
-    {
-      id: '2',
-      name: 'GulfZone Trading',
-      email: 'info@trading.gulfzone.com',
-      phone: '+971-4-234-5678',
-      industry: 'Import/Export',
-      city: 'Abu Dhabi',
-      country: 'UAE',
-      employee_count: 180,
-      founded_year: 2010,
-    },
-    {
-      id: '3',
-      name: 'GulfZone Logistics',
-      email: 'info@logistics.gulfzone.com',
-      phone: '+971-6-345-6789',
-      industry: 'Logistics & Distribution',
-      city: 'Sharjah',
-      country: 'UAE',
-      employee_count: 150,
-      founded_year: 2018,
-    },
-    {
-      id: '4',
-      name: 'GulfZone Consulting',
-      email: 'info@consulting.gulfzone.com',
-      phone: '+971-4-456-7890',
-      industry: 'Management Consulting',
-      city: 'Dubai',
-      country: 'UAE',
-      employee_count: 75,
-      founded_year: 2019,
-    },
-  ];
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<CompanyFormData>({
+    resolver: zodResolver(companySchema),
+  });
+
+  // Fetch companies from database
+  const fetchCompanies = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id,name,email,phone,industry,city,country,founded_year,address,created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCompanies(data || []);
+    } catch (err) {
+      console.error('Error fetching companies:', err);
+      setMessage({ type: 'error', text: 'Failed to load companies' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch companies on mount
+  React.useEffect(() => {
+    fetchCompanies();
+  }, []);
+
+  const onSubmit = async (data: CompanyFormData) => {
+    try {
+      setIsSubmitting(true);
+      setMessage(null);
+
+      if (editingId) {
+        // Update existing company
+        const { error } = await supabase
+          .from('companies')
+          .update({
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            industry: data.industry,
+            city: data.city,
+            country: data.country,
+            founded_year: data.founded_year,
+            address: data.address,
+          })
+          .eq('id', editingId);
+
+        if (error) throw error;
+        setMessage({ type: 'success', text: 'Company updated successfully' });
+      } else {
+        // Create new company
+        const { error } = await supabase.from('companies').insert({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          industry: data.industry,
+          city: data.city,
+          country: data.country,
+          founded_year: data.founded_year,
+          address: data.address,
+        });
+
+        if (error) throw error;
+        setMessage({ type: 'success', text: 'Company added successfully' });
+      }
+
+      reset();
+      setEditingId(null);
+      setShowModal(false);
+      fetchCompanies();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      const errMsg = (err as any)?.message || 'Failed to save company';
+      setMessage({ type: 'error', text: errMsg });
+      console.error('Error saving company:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = (company: any) => {
+    reset({
+      name: company.name,
+      email: company.email,
+      phone: company.phone,
+      industry: company.industry,
+      city: company.city,
+      country: company.country,
+      founded_year: company.founded_year,
+      address: company.address,
+    });
+    setEditingId(company.id);
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    reset();
+    setMessage(null);
+  };
+
+  const deleteCompany = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this company?')) return;
+
+    try {
+      setDeleteLoading(id);
+      const { error } = await supabase.from('companies').delete().eq('id', id);
+      if (error) throw error;
+
+      setMessage({ type: 'success', text: 'Company deleted successfully' });
+      fetchCompanies();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Failed to delete company' });
+      console.error('Error deleting company:', err);
+    } finally {
+      setDeleteLoading(null);
+    }
+  };
 
   const columns = [
     {
@@ -84,12 +187,17 @@ const CompaniesPage: React.FC = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: () => (
+      render: (_: any, row: any) => (
         <div className="flex gap-2">
-          <button className="p-1 hover:bg-gray-200 rounded transition">
+          <button onClick={() => handleEdit(row)} className="p-1 hover:bg-gray-200 rounded transition" title="Edit">
             <Edit size={18} className="text-gray-600" />
           </button>
-          <button className="p-1 hover:bg-gray-200 rounded transition">
+          <button
+            onClick={() => deleteCompany(row.id)}
+            disabled={deleteLoading === row.id}
+            className="p-1 hover:bg-gray-200 rounded transition disabled:opacity-50"
+            title="Delete"
+          >
             <Trash2 size={18} className="text-red-600" />
           </button>
         </div>
@@ -112,9 +220,23 @@ const CompaniesPage: React.FC = () => {
           </Button>
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+        )}
+
+        {!loading && (
+          <>
         {/* Company Cards Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {companies.map((company) => (
+          {companies.length === 0 ? (
+            <div className="col-span-full text-center py-8 text-gray-500">
+              No companies found. Add your first company to get started.
+            </div>
+          ) : (
+            companies.map((company) => (
             <Card key={company.id} className="hover:shadow-lg transition">
               <div className="space-y-4">
                 <div>
@@ -143,44 +265,156 @@ const CompaniesPage: React.FC = () => {
                 </div>
               </div>
             </Card>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Detailed Table */}
         <Card header={<h2 className="text-lg font-semibold">All Companies</h2>} noPadding>
-          <Table columns={columns} data={companies} />
+          {companies.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No companies found
+            </div>
+          ) : (
+            <Table columns={columns} data={companies} />
+          )}
         </Card>
+          </>
+        )}
       </div>
 
-      {/* Add Company Modal */}
+      {/* Add/Edit Company Modal */}
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Add New Company"
+        onClose={handleCloseModal}
+        title={editingId ? 'Edit Company' : 'Add New Company'}
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
+            <Button variant="secondary" onClick={handleCloseModal}>
               Cancel
             </Button>
-            <Button variant="primary">
-              Add Company
+            <Button variant="primary" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+              {isSubmitting ? (editingId ? 'Updating...' : 'Adding...') : (editingId ? 'Update Company' : 'Add Company')}
             </Button>
           </>
         }
       >
-        <div className="space-y-4">
-          <Input label="Company Name" placeholder="Enter company name" />
-          <Input label="Email" type="email" placeholder="Enter company email" />
-          <Input label="Phone" placeholder="Enter phone number" />
-          <Input label="Industry" placeholder="Enter industry" />
-          <div className="grid grid-cols-3 gap-4">
-            <Input label="City" placeholder="Enter city" />
-            <Input label="Country" placeholder="Enter country" />
-            <Input label="Founded Year" type="number" placeholder="Enter year" />
+        <form className="space-y-4">
+          {message && (
+            <div className={`p-3 rounded-lg ${
+              message.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
+            <input
+              {...register('name')}
+              type="text"
+              placeholder="Enter company name"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.name && (
+              <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+            )}
           </div>
-          <Input label="Address" placeholder="Enter full address" />
-        </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <input
+              {...register('email')}
+              type="email"
+              placeholder="Enter company email"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+            <input
+              {...register('phone')}
+              type="tel"
+              placeholder="Enter phone number"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.phone && (
+              <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
+            <input
+              {...register('industry')}
+              type="text"
+              placeholder="Enter industry"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.industry && (
+              <p className="mt-1 text-sm text-red-600">{errors.industry.message}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+              <input
+                {...register('city')}
+                type="text"
+                placeholder="Enter city"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {errors.city && (
+                <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+              <input
+                {...register('country')}
+                type="text"
+                placeholder="Enter country"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {errors.country && (
+                <p className="mt-1 text-sm text-red-600">{errors.country.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Founded Year</label>
+              <input
+                {...register('founded_year', { valueAsNumber: true })}
+                type="number"
+                placeholder="Enter year"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {errors.founded_year && (
+                <p className="mt-1 text-sm text-red-600">{errors.founded_year.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+            <input
+              {...register('address')}
+              type="text"
+              placeholder="Enter full address"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.address && (
+              <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>
+            )}
+          </div>
+        </form>
       </Modal>
     </Layout>
   );

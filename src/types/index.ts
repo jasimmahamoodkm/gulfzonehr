@@ -1,3 +1,15 @@
+export interface Document {
+  id: string;
+  document_type: 'License' | 'Passport' | 'Emirates ID' | 'Company License';
+  document_number: string;
+  issue_date: string;
+  expiry_date: string;
+  issuing_authority: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -9,6 +21,8 @@ export interface Company {
   industry: string;
   founded_year: number;
   employee_count: number;
+  company_license?: Document;
+  documents?: Document[];
   created_at: string;
   updated_at: string;
 }
@@ -30,12 +44,17 @@ export interface Employee {
   salary: number;
   employment_type: 'Full-Time' | 'Part-Time' | 'Contract' | 'Intern';
   status: 'Active' | 'Inactive' | 'On Leave' | 'Terminated';
+  driving_license?: Document;
+  passport?: Document;
+  emirates_id?: Document;
+  documents?: Document[];
   created_at: string;
   updated_at: string;
 }
 
 export interface Leave {
   id: string;
+  company_id: string;
   employee_id: string;
   leave_type: 'Vacation' | 'Sick' | 'Personal' | 'Maternity' | 'Other';
   start_date: string;
@@ -49,6 +68,7 @@ export interface Leave {
 
 export interface Attendance {
   id: string;
+  company_id: string;
   employee_id: string;
   date: string;
   check_in: string;
@@ -61,6 +81,7 @@ export interface Attendance {
 
 export interface Payroll {
   id: string;
+  company_id: string;
   employee_id: string;
   month: string;
   salary: number;
@@ -70,6 +91,32 @@ export interface Payroll {
   status: 'Draft' | 'Processed' | 'Paid';
   created_at: string;
   updated_at: string;
+}
+
+export interface DocumentExpiry {
+  id: string;
+  company_id: string;
+  employee_id?: string;
+  document_id: string;
+  document_type: string;
+  expiry_date: string;
+  days_until_expiry: number;
+  status: 'Active' | 'Expiring Soon' | 'Expired';
+  notification_sent: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Activity {
+  id: string;
+  company_id: string;
+  employee_id?: string;
+  activity_type: string;
+  description: string;
+  entity_type: 'Employee' | 'Leave' | 'Attendance' | 'Payroll' | 'Document';
+  entity_id: string;
+  performed_by: string;
+  created_at: string;
 }
 
 export interface User {

@@ -1,90 +1,160 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import Input from '@/components/ui/Input';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
-import { Plus, Download } from 'lucide-react';
+import MonthPicker from '@/components/ui/MonthPicker';
+import { Plus, Download, Calendar } from 'lucide-react';
+import { useCompany } from '@/context/CompanyContext';
+import { supabase } from '@/lib/supabase';
+
+const payrollSchema = z.object({
+  employee_id: z.string().min(1, 'Employee is required'),
+  month: z.string().min(1, 'Month is required'),
+  salary: z.number().min(0, 'Salary must be positive'),
+  bonus: z.number().min(0, 'Bonus must be positive').optional(),
+  deductions: z.number().min(0, 'Deductions must be positive').optional(),
+});
+
+type PayrollFormData = z.infer<typeof payrollSchema>;
 
 const PayrollPage: React.FC = () => {
+  const { selectedCompany } = useCompany();
   const [showModal, setShowModal] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [payrollData, setPayrollData] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const payrollData = [
-    {
-      id: '1',
-      employee_name: 'Ahmed Hassan',
-      position: 'Senior Developer',
-      basic_salary: 8500,
-      allowances: 1500,
-      deductions: 850,
-      net_pay: 9150,
-      status: 'Paid',
-    },
-    {
-      id: '2',
-      employee_name: 'Fatima Al-Zahra',
-      position: 'HR Manager',
-      basic_salary: 6500,
-      allowances: 1000,
-      deductions: 650,
-      net_pay: 6850,
-      status: 'Paid',
-    },
-    {
-      id: '3',
-      employee_name: 'Mohammed Ali',
-      position: 'Sales Executive',
-      basic_salary: 5000,
-      allowances: 1200,
-      deductions: 520,
-      net_pay: 5680,
-      status: 'Processed',
-    },
-    {
-      id: '4',
-      employee_name: 'Leila Ibrahim',
-      position: 'Marketing Specialist',
-      basic_salary: 4500,
-      allowances: 800,
-      deductions: 430,
-      net_pay: 4870,
-      status: 'Pending',
-    },
-  ];
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<PayrollFormData>({
+    resolver: zodResolver(payrollSchema),
+  });
 
+  const payrollMonth = watch('month');
+
+  // Fetch payroll data
+  const fetchPayroll = async () => {
+    try {
+      setLoading(true);
+      if (!selectedCompany) {
+        setPayrollData([]);
+        return;
+      }
+
+      // Get employees
+      const { data: empData } = await supabase
+        .from('employees')
+        .select('id,first_name,last_name,position')
+        .eq('company_id', selectedCompany.id);
+
+      setEmployees(empData || []);
+
+      // Get payroll
+      const { data: payData, error } = await supabase
+        .from('payroll')
+        .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at')
+        .in('employee_id', empData?.map((e) => e.id) || [])
+        .eq('month', selectedMonth)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPayrollData(payData || []);
+    } catch (err) {
+      console.error('Error fetching payroll:', err);
+      setMessage({ type: 'error', text: 'Failed to load payroll records' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchPayroll();
+  }, [selectedCompany, selectedMonth]);
+
+  const onSubmit = async (data: PayrollFormData) => {
+    try {
+      setIsSubmitting(true);
+      setMessage(null);
+
+      const bonus = data.bonus || 0;
+      const deductions = data.deductions || 0;
+      const net_pay = data.salary + bonus - deductions;
+
+      const { error } = await supabase.from('payroll').insert({
+        employee_id: data.employee_id,
+        month: data.month,
+        salary: data.salary,
+        bonus: bonus,
+        deductions: deductions,
+        net_pay,
+        status: 'Processed',
+      });
+
+      if (error) throw error;
+
+      setMessage({ type: 'success', text: 'Payroll processed successfully' });
+      reset();
+      setShowModal(false);
+      fetchPayroll();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      const errMsg = (err as any)?.message || 'Failed to process payroll';
+      setMessage({ type: 'error', text: errMsg });
+      console.error('Error processing payroll:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Calculate summary
   const payrollSummary = {
-    total_salary: 24500,
-    total_allowances: 4500,
-    total_deductions: 2450,
-    total_net_pay: 26550,
-    paid: 2,
-    processed: 1,
-    pending: 1,
+    total_salary: payrollData.reduce((sum, p) => sum + (p.salary || 0), 0),
+    total_allowances: payrollData.reduce((sum, p) => sum + (p.bonus || 0), 0),
+    total_deductions: payrollData.reduce((sum, p) => sum + (p.deductions || 0), 0),
+    total_net_pay: payrollData.reduce((sum, p) => sum + (p.net_pay || 0), 0),
+    paid: payrollData.filter((p) => p.status === 'Paid').length,
+    processed: payrollData.filter((p) => p.status === 'Processed').length,
+    pending: payrollData.filter((p) => p.status === 'Pending').length,
   };
 
   const columns = [
     {
-      key: 'employee_name',
+      key: 'employee_id',
       label: 'Employee',
+      render: (value: string) => {
+        const emp = employees.find((e) => e.id === value);
+        return emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown';
+      },
     },
     {
-      key: 'basic_salary',
+      key: 'salary',
       label: 'Basic Salary',
       render: (value: number) => `$${value.toLocaleString()}`,
     },
     {
-      key: 'allowances',
+      key: 'bonus',
       label: 'Allowances',
-      render: (value: number) => `$${value.toLocaleString()}`,
+      render: (value: number) => `$${(value || 0).toLocaleString()}`,
     },
     {
       key: 'deductions',
       label: 'Deductions',
-      render: (value: number) => `$${value.toLocaleString()}`,
+      render: (value: number) => `$${(value || 0).toLocaleString()}`,
     },
     {
       key: 'net_pay',
@@ -119,23 +189,49 @@ const PayrollPage: React.FC = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Payroll Management</h1>
-            <p className="text-gray-600 mt-1">Manage salaries, allowances, and deductions</p>
+            <p className="text-gray-600 mt-1">
+              {selectedCompany ? `Manage payroll for ${selectedCompany.name}` : 'Select a company to manage payroll'}
+            </p>
           </div>
-          <Button variant="primary" onClick={() => setShowModal(true)} className="gap-2">
+          <Button
+            variant="primary"
+            onClick={() => setShowModal(true)}
+            disabled={!selectedCompany}
+            className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Plus size={20} />
             Process Payroll
           </Button>
         </div>
 
+        {!selectedCompany && (
+          <Card className="bg-blue-50 border border-blue-200">
+            <p className="text-blue-700 text-center py-4">Please select a company from the header to manage payroll</p>
+          </Card>
+        )}
+
+        {selectedCompany && (
+          <>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+        )}
+
+        {!loading && (
+          <>
         {/* Month Selector */}
         <Card>
           <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">Select Month:</label>
-            <input
-              type="month"
+            <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <Calendar size={16} />
+              Select Month:
+            </label>
+            <MonthPicker
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(month) => setSelectedMonth(month)}
+              placeholder="Select month"
             />
           </div>
         </Card>
@@ -182,7 +278,13 @@ const PayrollPage: React.FC = () => {
           header={<h2 className="text-lg font-semibold">Payroll Details</h2>}
           noPadding
         >
-          <Table columns={columns} data={payrollData} />
+          {payrollData.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">
+              No payroll records for this month
+            </div>
+          ) : (
+            <Table columns={columns} data={payrollData} />
+          )}
         </Card>
 
         {/* Actions */}
@@ -195,47 +297,121 @@ const PayrollPage: React.FC = () => {
             Generate Pay Slips
           </Button>
         </div>
+          </>
+        )}
+          </>
+        )}
       </div>
 
       {/* Process Payroll Modal */}
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          setShowModal(false);
+          reset();
+          setMessage(null);
+        }}
         title="Process Payroll"
         size="md"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
+            <Button variant="secondary" onClick={() => {
+              setShowModal(false);
+              reset();
+              setMessage(null);
+            }}>
               Cancel
             </Button>
-            <Button variant="primary">
-              Process Payroll
+            <Button variant="primary" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+              {isSubmitting ? 'Processing...' : 'Process Payroll'}
             </Button>
           </>
         }
       >
-        <div className="space-y-4">
+        <form className="space-y-4">
+          {message && (
+            <div className={`p-3 rounded-lg ${
+              message.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select Companies</label>
-            <div className="space-y-2">
-              {['GulfZone Tech', 'GulfZone Trading', 'GulfZone Logistics', 'GulfZone Consulting'].map((company) => (
-                <label key={company} className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" defaultChecked />
-                  <span className="text-sm text-gray-700">{company}</span>
-                </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Employee</label>
+            <select
+              {...register('employee_id')}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Employee</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.first_name} {emp.last_name}
+                </option>
               ))}
+            </select>
+            {errors.employee_id && (
+              <p className="mt-1 text-sm text-red-600">{errors.employee_id.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <Calendar size={16} />
+              Month
+            </label>
+            <MonthPicker
+              value={payrollMonth}
+              onChange={(month) => setValue('month', month)}
+              placeholder="Select month"
+            />
+            {errors.month && (
+              <p className="mt-1 text-sm text-red-600">{errors.month.message}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary</label>
+              <input
+                {...register('salary', { valueAsNumber: true })}
+                type="number"
+                step="0.01"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {errors.salary && (
+                <p className="mt-1 text-sm text-red-600">{errors.salary.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Bonus/Allowance</label>
+              <input
+                {...register('bonus', { valueAsNumber: true })}
+                type="number"
+                step="0.01"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {errors.bonus && (
+                <p className="mt-1 text-sm text-red-600">{errors.bonus.message}</p>
+              )}
             </div>
           </div>
-          <Input label="Payment Date" type="date" />
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-            <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option>Bank Transfer</option>
-              <option>Cheque</option>
-              <option>Cash</option>
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Deductions</label>
+            <input
+              {...register('deductions', { valueAsNumber: true })}
+              type="number"
+              step="0.01"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.deductions && (
+              <p className="mt-1 text-sm text-red-600">{errors.deductions.message}</p>
+            )}
           </div>
-        </div>
+        </form>
       </Modal>
     </Layout>
   );
