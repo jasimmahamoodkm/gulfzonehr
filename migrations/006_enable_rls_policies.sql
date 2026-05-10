@@ -266,13 +266,7 @@ CREATE POLICY activity_logs_insert_policy ON activity_logs
   FOR INSERT
   WITH CHECK (true);
 
--- Grant execute on functions to authenticated users
-GRANT EXECUTE ON FUNCTION get_pending_leave_approvals(uuid, uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION approve_leave(uuid, uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION reject_leave(uuid, uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION initialize_employee_leave_balance(uuid, uuid, integer) TO authenticated;
-GRANT EXECUTE ON FUNCTION log_audit_event(uuid, uuid, text, text, uuid, text, jsonb, jsonb, text, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION log_activity_event(uuid, uuid, text, text, jsonb, text) TO authenticated;
+-- Note: Function permissions are handled by Supabase automatically for authenticated users
 
 -- Create helpful indexes for RLS queries
 CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
