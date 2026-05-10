@@ -2,8 +2,9 @@
 
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User } from '@/types/index';
+import { User, UserRole, UserPermission } from '@/types/index';
 import { AuthContextType, LoginPayload, SignupPayload, AuthError } from '@/types/auth';
+import { PermissionCheckResult } from '@/types/rbac';
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -11,6 +12,49 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [permissionsCache, setPermissionsCache] = useState<Map<string, boolean>>(new Map());
+
+  // Load user roles and permissions
+  const loadUserRolesAndPermissions = async (userId: string, companyId?: string) => {
+    try {
+      // Fetch user roles
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('id, user_id, role_id, company_id, assigned_at, assigned_by, roles(name)')
+        .eq('user_id', userId)
+        .eq('company_id', companyId || '');
+
+      if (rolesError) throw rolesError;
+
+      // Transform roles data with role names
+      const roles = rolesData?.map(role => ({
+        ...role,
+        role_name: (role.roles as any)?.name,
+      })) || [];
+
+      // Fetch permissions for all roles
+      const roleIds = roles.map(r => r.role_id);
+      let permissions: UserPermission[] = [];
+
+      if (roleIds.length > 0) {
+        const { data: permissionsData, error: permError } = await supabase
+          .from('role_permissions')
+          .select('id, role_id, resource, action, created_at')
+          .in('role_id', roleIds);
+
+        if (permError) throw permError;
+        permissions = permissionsData || [];
+      }
+
+      // Clear cache for new permissions
+      setPermissionsCache(new Map());
+
+      return { roles, permissions };
+    } catch (err) {
+      console.error('Error loading roles and permissions:', err);
+      return { roles: [], permissions: [] };
+    }
+  };
 
   // Initialize auth state on mount
   useEffect(() => {
@@ -29,7 +73,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
           if (fetchError) throw fetchError;
 
-          setUser(userData as User);
+          // Load roles and permissions
+          const { roles, permissions } = await loadUserRolesAndPermissions(
+            session.user.id,
+            userData?.company_id
+          );
+
+          setUser({
+            ...userData as User,
+            roles,
+            permissions,
+          });
         }
       } catch (err) {
         console.error('Auth initialization error:', err);
@@ -51,13 +105,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .eq('id', session.user.id)
             .single();
 
-          setUser(userData as User);
+          if (userData) {
+            const { roles, permissions } = await loadUserRolesAndPermissions(
+              session.user.id,
+              userData?.company_id
+            );
+
+            setUser({
+              ...userData as User,
+              roles,
+              permissions,
+            });
+          }
           setError(null);
         } catch (err) {
           console.error('Error fetching user data:', err);
         }
       } else {
         setUser(null);
+        setPermissionsCache(new Map());
       }
     });
 
@@ -65,6 +131,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       subscription?.unsubscribe();
     };
   }, []);
+
+  // Check if user has permission
+  const hasPermission = (resource: string, action: string): PermissionCheckResult => {
+    if (!user || !user.permissions) {
+      return { allowed: false, reason: 'User not authenticated' };
+    }
+
+    const cacheKey = `${resource}:${action}`;
+
+    // Check cache first
+    if (permissionsCache.has(cacheKey)) {
+      return { allowed: permissionsCache.get(cacheKey)! };
+    }
+
+    // Check permissions
+    const hasAccess = user.permissions.some(
+      p => p.resource === resource && p.action === action
+    );
+
+    // Update cache
+    setPermissionsCache(prev => new Map(prev).set(cacheKey, hasAccess));
+
+    return {
+      allowed: hasAccess,
+      reason: hasAccess ? undefined : `No permission to ${action} ${resource}`,
+    };
+  };
 
   const login = async (payload: LoginPayload) => {
     try {
@@ -84,7 +177,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .single();
 
         if (fetchError) throw fetchError;
-        setUser(userData as User);
+
+        // Load roles and permissions
+        const { roles, permissions } = await loadUserRolesAndPermissions(
+          data.user.id,
+          userData?.company_id
+        );
+
+        setUser({
+          ...userData as User,
+          roles,
+          permissions,
+        });
       }
     } catch (err) {
       const authError = err as AuthError;
@@ -122,7 +226,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           throw createError;
         }
 
-        setUser(userData as User);
+        // Load roles and permissions for new user
+        const { roles, permissions } = await loadUserRolesAndPermissions(
+          data.user.id,
+          userData?.company_id
+        );
+
+        setUser({
+          ...userData as User,
+          roles,
+          permissions,
+        });
       }
     } catch (err) {
       const authError = err as AuthError;
@@ -139,6 +253,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
       setUser(null);
+      setPermissionsCache(new Map());
     } catch (err) {
       const authError = err as AuthError;
       setError(authError.message || 'Logout failed');
@@ -174,7 +289,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .single();
 
       if (error) throw error;
-      setUser(data as User);
+
+      // Reload permissions if company changed
+      if (updates.company_id && updates.company_id !== user.company_id) {
+        const { roles, permissions } = await loadUserRolesAndPermissions(
+          user.id,
+          updates.company_id
+        );
+        setUser({
+          ...data as User,
+          roles,
+          permissions,
+        });
+      } else {
+        setUser(data as User);
+      }
     } catch (err) {
       const authError = err as AuthError;
       setError(authError.message || 'Profile update failed');
@@ -192,6 +321,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
     updatePassword,
     updateProfile,
+    hasPermission,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

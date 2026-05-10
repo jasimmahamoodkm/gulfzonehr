@@ -119,6 +119,24 @@ export interface Activity {
   created_at: string;
 }
 
+export interface UserRole {
+  id: string;
+  user_id: string;
+  role_id: string;
+  role_name?: string;
+  company_id: string;
+  assigned_at: string;
+  assigned_by?: string;
+}
+
+export interface UserPermission {
+  id: string;
+  role_id: string;
+  resource: string;
+  action: string;
+  created_at: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -126,6 +144,8 @@ export interface User {
   last_name: string;
   role: 'Admin' | 'Manager' | 'Employee' | 'HR';
   company_id?: string;
+  roles?: UserRole[];
+  permissions?: UserPermission[];
   created_at: string;
   updated_at: string;
 }

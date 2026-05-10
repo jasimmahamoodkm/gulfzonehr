@@ -1,4 +1,5 @@
 import { User } from './index';
+import { PermissionCheckResult } from './rbac';
 
 export interface LoginPayload {
   email: string;
@@ -22,6 +23,7 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
+  hasPermission: (resource: string, action: string) => PermissionCheckResult;
 }
 
 export interface AuthError {
