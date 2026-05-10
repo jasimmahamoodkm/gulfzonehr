@@ -15,6 +15,9 @@ import {
   Menu,
   X,
   FileText,
+  Lock,
+  Shield,
+  CheckCircle,
 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,12 +34,18 @@ const MENU_ITEMS = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
+const ADMIN_MENU_ITEMS = [
+  { href: '/admin/rbac', label: 'RBAC Management', icon: Lock, requiredRole: 'Company Admin' },
+  { href: '/admin/audit-logs', label: 'Audit Logs', icon: Shield, requiredRole: 'Company Admin' },
+  { href: '/admin/leave-approvals', label: 'Leave Approvals', icon: CheckCircle, requiredRole: 'HR Manager' },
+];
+
 const Sidebar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { selectedCompany } = useCompany();
-  const { logout } = useAuth();
+  const { logout, user, hasPermission } = useAuth();
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
 
@@ -48,6 +57,28 @@ const Sidebar: React.FC = () => {
       console.error('Logout failed:', error);
     }
   };
+
+  // Check if user is admin
+  const isAdmin = user?.roles?.some(role => 
+    role.role_name === 'Super Admin' || 
+    role.role_name === 'Company Admin' ||
+    role.role_name === 'HR Manager'
+  );
+
+  // Filter admin items based on user's actual permissions
+  const visibleAdminItems = ADMIN_MENU_ITEMS.filter(item => {
+    if (item.requiredRole === 'Company Admin') {
+      return user?.roles?.some(r => r.role_name === 'Super Admin' || r.role_name === 'Company Admin');
+    }
+    if (item.requiredRole === 'HR Manager') {
+      return user?.roles?.some(r => 
+        r.role_name === 'Super Admin' || 
+        r.role_name === 'Company Admin' || 
+        r.role_name === 'HR Manager'
+      );
+    }
+    return true;
+  });
 
   return (
     <>
@@ -95,6 +126,37 @@ const Sidebar: React.FC = () => {
             );
           })}
         </nav>
+
+        {/* Admin Section */}
+        {isAdmin && visibleAdminItems.length > 0 && (
+          <>
+            <div className="px-4 py-3 mx-4 my-4 border-t border-b border-gray-200">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Administration</p>
+              <div className="space-y-2">
+                {visibleAdminItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.href);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors ${
+                        active
+                          ? 'bg-purple-100 text-purple-600 font-medium'
+                          : 'text-gray-600 hover:bg-purple-50'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Bottom Section */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50 space-y-2">
