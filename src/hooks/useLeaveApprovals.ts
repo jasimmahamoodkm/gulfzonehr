@@ -11,7 +11,8 @@ import { logAuditEvent } from '@/lib/audit';
 import type { LeaveApprovalRequest, LeaveRejectionRequest } from '@/types/leaves';
 
 export function useLeaveApprovals() {
-  const { user } = useContext(AuthContext);
+  const context = useContext(AuthContext);
+  const user = context?.user;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -5,13 +5,13 @@
  * Provides RBAC functionality in React components
  */
 
-import { useCallback, useContext, useMemo } from 'react';
+import { useCallback, useContext } from 'react';
 import { AuthContext } from '@/context/AuthContext';
 import { checkPermission, isAdmin, canAccessResource } from '@/lib/rbac';
-import type { PermissionCheckResult } from '@/types/rbac';
 
 export function useRBAC() {
-  const { user } = useContext(AuthContext);
+  const context = useContext(AuthContext);
+  const user = context?.user;
 
   /**
    * Check if user has a specific permission
@@ -37,7 +37,7 @@ export function useRBAC() {
 
       const results = await Promise.all(
         permissions.map(p =>
-          checkPermission(user.id, user.company_id, p.resource, p.action)
+          checkPermission(user.id!, user.company_id!, p.resource, p.action)
         )
       );
 
@@ -57,7 +57,7 @@ export function useRBAC() {
 
       const results = await Promise.all(
         permissions.map(p =>
-          checkPermission(user.id, user.company_id, p.resource, p.action)
+          checkPermission(user.id!, user.company_id!, p.resource, p.action)
         )
       );
 
@@ -111,7 +111,8 @@ export function useRBAC() {
  * Hook to get pending leave approvals for a manager
  */
 export function usePendingLeaveApprovals() {
-  const { user } = useContext(AuthContext);
+  const context = useContext(AuthContext);
+  const user = context?.user;
 
   const fetchPendingApprovals = useCallback(async () => {
     if (!user?.id || !user?.company_id) {

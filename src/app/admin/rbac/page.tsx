@@ -1,21 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { Role, Permission, UserRole } from '@/types/rbac';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Role } from '@/types/rbac';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
 
 export default function RBACManagementPage() {
   const { user } = useAuth();
-  const router = useRouter();
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'roles' | 'users'>('roles');
   const [showRoleForm, setShowRoleForm] = useState(false);
   const [newRole, setNewRole] = useState({ name: '', description: '' });
@@ -29,8 +26,6 @@ export default function RBACManagementPage() {
 
   const loadData = async () => {
     try {
-      setLoading(true);
-
       // Load roles
       const { data: rolesData, error: rolesError } = await supabase
         .from('roles')
@@ -58,8 +53,6 @@ export default function RBACManagementPage() {
       setUsers(usersData || []);
     } catch (err) {
       console.error('Error loading data:', err);
-    } finally {
-      setLoading(false);
     }
   };
 

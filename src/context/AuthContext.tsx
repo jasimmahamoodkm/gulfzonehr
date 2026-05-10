@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, UserRole, UserPermission } from '@/types/index';
+import { User, UserPermission } from '@/types/index';
 import { AuthContextType, LoginPayload, SignupPayload, AuthError } from '@/types/auth';
 import { PermissionCheckResult } from '@/types/rbac';
 

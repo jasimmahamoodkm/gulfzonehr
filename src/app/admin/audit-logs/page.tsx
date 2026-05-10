@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { AuditLog, AuditLogFilter } from '@/types/audit';
-import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
+import Card from '@/components/ui/Card';
+import Input from '@/components/ui/Input';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -68,7 +68,7 @@ export default function AuditLogsPage() {
     }
   };
 
-  const handleFilterChange = (key: keyof AuditLogFilter, value: any) => {
+  const handleFilterChange = (key: keyof AuditLogFilter, value: string | undefined) => {
     setFilters({ ...filters, [key]: value || undefined });
     setPage(1); // Reset to first page when filters change
   };
@@ -109,7 +109,7 @@ export default function AuditLogsPage() {
               <Input
                 type="text"
                 value={filters.action || ''}
-                onChange={(e) => handleFilterChange('action', e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('action', e.target.value)}
                 placeholder="e.g., create, update, delete"
               />
             </div>
@@ -120,7 +120,7 @@ export default function AuditLogsPage() {
               <Input
                 type="text"
                 value={filters.resource_type || ''}
-                onChange={(e) => handleFilterChange('resource_type', e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('resource_type', e.target.value)}
                 placeholder="e.g., users, employees"
               />
             </div>
@@ -130,7 +130,7 @@ export default function AuditLogsPage() {
               </label>
               <select
                 value={filters.status || ''}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('status', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All</option>
@@ -145,7 +145,7 @@ export default function AuditLogsPage() {
               <Input
                 type="date"
                 value={filters.start_date || ''}
-                onChange={(e) => handleFilterChange('start_date', e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('start_date', e.target.value)}
               />
             </div>
             <div>
@@ -155,7 +155,7 @@ export default function AuditLogsPage() {
               <Input
                 type="date"
                 value={filters.end_date || ''}
-                onChange={(e) => handleFilterChange('end_date', e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('end_date', e.target.value)}
               />
             </div>
           </div>

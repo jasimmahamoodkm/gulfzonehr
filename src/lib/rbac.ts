@@ -4,7 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import type { PermissionContext, PermissionCheckResult } from '@/types/rbac';
+import type { PermissionCheckResult } from '@/types/rbac';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -362,14 +362,14 @@ export async function isAdmin(userId: string, companyId?: string): Promise<boole
       query.eq('company_id', companyId);
     }
 
-    const { data: userRoles } = await query;
+    const { data: userRoles } = await query as any;
 
     if (!userRoles || userRoles.length === 0) {
       return false;
     }
 
     return userRoles.some(
-      ur =>
+      (ur: any) =>
         ur.role?.name === 'Super Admin' ||
         (companyId && ur.role?.name === 'Company Admin')
     );

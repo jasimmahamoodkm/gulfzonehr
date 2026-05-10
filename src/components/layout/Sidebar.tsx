@@ -45,7 +45,7 @@ const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { selectedCompany } = useCompany();
-  const { logout, user, hasPermission } = useAuth();
+  const { logout, user } = useAuth();
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
 
