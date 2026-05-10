@@ -96,7 +96,17 @@ CREATE POLICY leave_approvers_policy ON leave_approvers
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 
 -- Only admins can view and manage roles
-CREATE POLICY roles_admin_policy ON roles
+CREATE POLICY roles_admin_select_policy ON roles
+  FOR SELECT
+  USING (auth.uid() IN (
+    SELECT user_id FROM user_roles
+    WHERE role_id IN (
+      SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin')
+    )
+  ) AND company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid())
+  OR is_system = true);
+
+CREATE POLICY roles_admin_write_policy ON roles
   FOR ALL
   USING (auth.uid() IN (
     SELECT user_id FROM user_roles
@@ -146,9 +156,45 @@ CREATE POLICY role_permissions_view_policy ON role_permissions
   ));
 
 -- Only admins can modify permissions
-CREATE POLICY role_permissions_admin_policy ON role_permissions
-  FOR INSERT, UPDATE, DELETE
+CREATE POLICY role_permissions_insert_policy ON role_permissions
+  FOR INSERT
   WITH CHECK (role_id IN (
+    SELECT id FROM roles
+    WHERE company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid())
+    AND auth.uid() IN (
+      SELECT user_id FROM user_roles
+      WHERE role_id IN (
+        SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin')
+      )
+    )
+  ));
+
+CREATE POLICY role_permissions_update_policy ON role_permissions
+  FOR UPDATE
+  USING (role_id IN (
+    SELECT id FROM roles
+    WHERE company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid())
+    AND auth.uid() IN (
+      SELECT user_id FROM user_roles
+      WHERE role_id IN (
+        SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin')
+      )
+    )
+  ))
+  WITH CHECK (role_id IN (
+    SELECT id FROM roles
+    WHERE company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid())
+    AND auth.uid() IN (
+      SELECT user_id FROM user_roles
+      WHERE role_id IN (
+        SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin')
+      )
+    )
+  ));
+
+CREATE POLICY role_permissions_delete_policy ON role_permissions
+  FOR DELETE
+  USING (role_id IN (
     SELECT id FROM roles
     WHERE company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid())
     AND auth.uid() IN (
@@ -168,9 +214,33 @@ CREATE POLICY leave_types_policy ON leave_types
   USING (company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid()));
 
 -- Only admins can modify leave types
-CREATE POLICY leave_types_admin_policy ON leave_types
-  FOR INSERT, UPDATE, DELETE
+CREATE POLICY leave_types_insert_policy ON leave_types
+  FOR INSERT
   WITH CHECK (auth.uid() IN (
+    SELECT user_id FROM user_roles
+    WHERE role_id IN (
+      SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin', 'HR Manager')
+    )
+  ) AND company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid()));
+
+CREATE POLICY leave_types_update_policy ON leave_types
+  FOR UPDATE
+  USING (auth.uid() IN (
+    SELECT user_id FROM user_roles
+    WHERE role_id IN (
+      SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin', 'HR Manager')
+    )
+  ) AND company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid()))
+  WITH CHECK (auth.uid() IN (
+    SELECT user_id FROM user_roles
+    WHERE role_id IN (
+      SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin', 'HR Manager')
+    )
+  ) AND company_id = (SELECT company_id FROM auth.users WHERE id = auth.uid()));
+
+CREATE POLICY leave_types_delete_policy ON leave_types
+  FOR DELETE
+  USING (auth.uid() IN (
     SELECT user_id FROM user_roles
     WHERE role_id IN (
       SELECT id FROM roles WHERE name IN ('Super Admin', 'Company Admin', 'HR Manager')
