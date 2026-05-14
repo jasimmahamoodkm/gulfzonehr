@@ -16,7 +16,7 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const router = useRouter();
   const { selectedCompany, setSelectedCompany, companies } = useCompany();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
 
@@ -51,13 +51,18 @@ const Header: React.FC<HeaderProps> = ({
     };
   }, [userMenuOpen]);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
+  // Check if user is admin
+  const isAdmin = useMemo(
+    () => user?.roles?.some(role =>
+      role.role_name === 'Super Admin' ||
+      role.role_name === 'Company Admin'
+    ) || false,
+    [user?.roles]
+  );
+
+  const handleLogout = () => {
+    console.log('🚪 Logout button clicked, navigating to /logout page');
+    router.push('/logout');
   };
 
   return (
@@ -75,52 +80,54 @@ const Header: React.FC<HeaderProps> = ({
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-8">
-            {/* Company Selector */}
-            <div className="relative">
-              <button
-                onClick={() => setCompanyMenuOpen(!companyMenuOpen)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-gray-700 text-sm font-medium"
-              >
-                {selectedCompany?.name || 'Select Company'}
-                <ChevronDown size={16} />
-              </button>
-              {companyMenuOpen && (
-                <div className="absolute top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                  {companies.map((company) => (
-                    <button
-                      key={company.id}
-                      onClick={() => {
-                        setSelectedCompany(company);
-                        setCompanyMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-100 transition ${
-                        selectedCompany?.id === company.id
-                          ? 'bg-blue-50 text-blue-600 font-medium'
-                          : 'text-gray-700'
-                      }`}
-                    >
-                      {company.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          {/* Desktop Navigation - Only for Admins */}
+          {isAdmin && (
+            <nav className="hidden md:flex items-center gap-8">
+              {/* Company Selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setCompanyMenuOpen(!companyMenuOpen)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-gray-700 text-sm font-medium"
+                >
+                  {selectedCompany?.name || 'Select Company'}
+                  <ChevronDown size={16} />
+                </button>
+                {companyMenuOpen && (
+                  <div className="absolute top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    {companies.map((company) => (
+                      <button
+                        key={company.id}
+                        onClick={() => {
+                          setSelectedCompany(company);
+                          setCompanyMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-100 transition ${
+                          selectedCompany?.id === company.id
+                            ? 'bg-blue-50 text-blue-600 font-medium'
+                            : 'text-gray-700'
+                        }`}
+                      >
+                        {company.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <Link href="/dashboard" className="text-gray-700 hover:text-blue-600 transition">
-              Dashboard
-            </Link>
-            <Link href="/employees" className="text-gray-700 hover:text-blue-600 transition">
-              Employees
-            </Link>
-            <Link href="/companies" className="text-gray-700 hover:text-blue-600 transition">
-              Companies
-            </Link>
-            <Link href="/attendance" className="text-gray-700 hover:text-blue-600 transition">
-              Attendance
-            </Link>
-          </nav>
+              <Link href="/dashboard" className="text-gray-700 hover:text-blue-600 transition">
+                Dashboard
+              </Link>
+              <Link href="/employees" className="text-gray-700 hover:text-blue-600 transition">
+                Employees
+              </Link>
+              <Link href="/companies" className="text-gray-700 hover:text-blue-600 transition">
+                Companies
+              </Link>
+              <Link href="/attendance" className="text-gray-700 hover:text-blue-600 transition">
+                Attendance
+              </Link>
+            </nav>
+          )}
 
           {/* User Menu */}
           <div className="flex items-center gap-4">
@@ -181,46 +188,53 @@ const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Mobile Navigation - Only Admin Links for Admins */}
         {menuOpen && (
           <nav className="md:hidden pb-4 space-y-2 border-t border-gray-200 pt-4">
-            <div className="px-4 py-2">
-              <label className="text-xs font-medium text-gray-600 mb-2 block">Select Company</label>
-              <select
-                value={selectedCompany?.id || ''}
-                onChange={(e) => {
-                  const company = companies.find(c => c.id === e.target.value);
-                  if (company) setSelectedCompany(company);
-                  setMenuOpen(false);
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              >
-                <option value="">-- Select Company --</option>
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Link href="/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
-              Dashboard
-            </Link>
-            <Link href="/employees" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
-              Employees
-            </Link>
-            <Link href="/companies" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
-              Companies
-            </Link>
-            <Link href="/attendance" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
-              Attendance
-            </Link>
-            <Link href="/settings" className="px-4 py-2 border-t border-gray-200 mt-4 pt-4 flex gap-2 text-gray-700 hover:bg-gray-100 rounded">
+            {isAdmin && (
+              <>
+                <div className="px-4 py-2">
+                  <label className="text-xs font-medium text-gray-600 mb-2 block">Select Company</label>
+                  <select
+                    value={selectedCompany?.id || ''}
+                    onChange={(e) => {
+                      const company = companies.find(c => c.id === e.target.value);
+                      if (company) setSelectedCompany(company);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="">-- Select Company --</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Link href="/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                  Dashboard
+                </Link>
+                <Link href="/employees" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                  Employees
+                </Link>
+                <Link href="/companies" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                  Companies
+                </Link>
+                <Link href="/attendance" className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                  Attendance
+                </Link>
+              </>
+            )}
+            <Link href="/settings" className={`px-4 py-2 flex gap-2 text-gray-700 hover:bg-gray-100 rounded ${isAdmin ? 'border-t border-gray-200 mt-4 pt-4' : ''}`}>
               <Settings size={18} />
               <span>Settings</span>
             </Link>
             <button
-              onClick={handleLogout}
+              onClick={() => {
+                handleLogout();
+                setMenuOpen(false);
+              }}
               className="w-full px-4 py-2 flex gap-2 text-red-600 hover:bg-red-50 rounded"
             >
               <LogOut size={18} />

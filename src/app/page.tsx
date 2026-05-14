@@ -1,11 +1,26 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import { Users, Building2, Calendar, TrendingUp } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 const Home: React.FC = () => {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  // Redirect employees to their dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      const isEmployee = user.roles?.some(role => role.role_name === 'Employee');
+      if (isEmployee) {
+        console.log('👤 Employee redirected to employee dashboard');
+        router.push('/employee-dashboard');
+      }
+    }
+  }, [user, loading, router]);
   const stats = [
     { label: 'Total Employees', value: 1250, icon: Users, color: 'bg-blue-100 text-blue-600' },
     { label: 'Total Companies', value: 8, icon: Building2, color: 'bg-green-100 text-green-600' },

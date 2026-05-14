@@ -39,7 +39,18 @@
       "Bash(git commit -m 'Phase 1 Implementation Status - 60% Complete *)",
       "Bash(git commit -m ' *)",
       "Bash(git config *)",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(python3)",
+      "Bash(find /Users/jasimmahmood/Documents -name \"Header.tsx\" -o -name \"Sidebar.tsx\" 2>/dev/null | head -20)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(curl -I http://localhost:3000)",
+      "mcp__Claude_in_Chrome__switch_browser",
+      "Bash(curl -s http://localhost:3000/logout)",
+      "Bash(echo \"Dev server started. PID: $!\")",
+      "Bash(kill 3585 3176)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(node -e ' *)",
+      "Bash(xargs cat)"
     ]
   }
 }

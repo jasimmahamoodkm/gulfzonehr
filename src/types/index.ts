@@ -146,6 +146,7 @@ export interface User {
   company_id?: string;
   roles?: UserRole[];
   permissions?: UserPermission[];
+  is_temporary_password?: boolean;
   created_at: string;
   updated_at: string;
 }

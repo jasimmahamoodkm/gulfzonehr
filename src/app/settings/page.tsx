@@ -237,52 +237,104 @@ const SettingsPage: React.FC = () => {
         {/* Notifications Settings */}
         {activeTab === 'notifications' && (
           <div className="space-y-6">
-            <Card header={<h2 className="text-lg font-semibold">Email Notifications</h2>}>
-              <div className="space-y-4">
-                {[
-                  { name: 'Leave Requests', description: 'Get notified when leave requests are submitted' },
-                  { name: 'Payroll Updates', description: 'Notifications about payroll processing and payments' },
-                  { name: 'Employee Alerts', description: 'New employee additions and changes' },
-                  { name: 'Attendance Alerts', description: 'Late arrivals and absences' },
-                  { name: 'System Updates', description: 'Important system maintenance and updates' },
-                ].map((notif) => (
-                  <label key={notif.name} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-                    <input type="checkbox" className="mt-1 rounded" defaultChecked />
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">{notif.name}</p>
-                      <p className="text-sm text-gray-600 mt-0.5">{notif.description}</p>
+            {/* Check if user is Employee */}
+            {user?.roles?.some(role => role.role_name === 'Employee') ? (
+              <>
+                <Card header={<h2 className="text-lg font-semibold">Email Notifications</h2>}>
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600 mb-4">You can receive notifications for the following alerts:</p>
+                    {[
+                      { name: 'Employee Alerts', description: 'New employee additions and changes' },
+                      { name: 'Attendance Alerts', description: 'Late arrivals and absences' },
+                    ].map((notif) => (
+                      <label key={notif.name} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+                        <input type="checkbox" className="mt-1 rounded" defaultChecked={false} />
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{notif.name}</p>
+                          <p className="text-sm text-gray-600 mt-0.5">{notif.description}</p>
+                        </div>
+                      </label>
+                    ))}
+                    <div className="flex gap-3 pt-4">
+                      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                        Save Preferences
+                      </button>
+                      <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
+                        Reset to Default
+                      </button>
                     </div>
-                  </label>
-                ))}
-                <div className="flex gap-3 pt-4">
-                  <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
-                    Save Preferences
-                  </button>
-                  <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
-                    Reset to Default
-                  </button>
-                </div>
-              </div>
-            </Card>
+                  </div>
+                </Card>
 
-            <Card header={<h2 className="text-lg font-semibold">SMS Notifications</h2>}>
-              <div className="space-y-4">
-                <p className="text-gray-600">Receive SMS alerts for critical notifications.</p>
-                <Input label="Mobile Number" defaultValue="+971-50-123-4567" />
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" className="rounded" defaultChecked />
-                  <span className="text-sm text-gray-700">Enable SMS notifications</span>
-                </label>
-                <div className="flex gap-3 pt-4">
-                  <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
-                    Update Settings
-                  </button>
-                  <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </Card>
+                <Card header={<h2 className="text-lg font-semibold">SMS Notifications</h2>}>
+                  <div className="space-y-4">
+                    <p className="text-gray-600">Receive SMS alerts for critical notifications.</p>
+                    <Input label="Mobile Number" placeholder="Enter your mobile number" />
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" className="rounded" defaultChecked={false} />
+                      <span className="text-sm text-gray-700">Enable SMS notifications</span>
+                    </label>
+                    <div className="flex gap-3 pt-4">
+                      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                        Update Settings
+                      </button>
+                      <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              </>
+            ) : (
+              <>
+                <Card header={<h2 className="text-lg font-semibold">Email Notifications</h2>}>
+                  <div className="space-y-4">
+                    {[
+                      { name: 'Leave Requests', description: 'Get notified when leave requests are submitted' },
+                      { name: 'Payroll Updates', description: 'Notifications about payroll processing and payments' },
+                      { name: 'Employee Alerts', description: 'New employee additions and changes' },
+                      { name: 'Attendance Alerts', description: 'Late arrivals and absences' },
+                      { name: 'System Updates', description: 'Important system maintenance and updates' },
+                    ].map((notif) => (
+                      <label key={notif.name} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
+                        <input type="checkbox" className="mt-1 rounded" defaultChecked />
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{notif.name}</p>
+                          <p className="text-sm text-gray-600 mt-0.5">{notif.description}</p>
+                        </div>
+                      </label>
+                    ))}
+                    <div className="flex gap-3 pt-4">
+                      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                        Save Preferences
+                      </button>
+                      <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
+                        Reset to Default
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card header={<h2 className="text-lg font-semibold">SMS Notifications</h2>}>
+                  <div className="space-y-4">
+                    <p className="text-gray-600">Receive SMS alerts for critical notifications.</p>
+                    <Input label="Mobile Number" defaultValue="+971-50-123-4567" />
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" className="rounded" defaultChecked />
+                      <span className="text-sm text-gray-700">Enable SMS notifications</span>
+                    </label>
+                    <div className="flex gap-3 pt-4">
+                      <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">
+                        Update Settings
+                      </button>
+                      <button className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              </>
+            )}
           </div>
         )}
       </div>

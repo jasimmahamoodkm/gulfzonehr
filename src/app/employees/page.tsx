@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,53 +11,141 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { Search, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { Search, Plus, Trash2, Copy, Check, Upload, Key } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 
-const employeeSchema = z.object({
-  first_name: z.string().min(2, 'First name must be at least 2 characters'),
-  last_name: z.string().min(2, 'Last name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().min(7, 'Phone number must be at least 7 characters'),
-  position: z.string().min(2, 'Position is required'),
-  department: z.string().min(2, 'Department is required'),
-  salary: z.number().min(0, 'Salary must be positive'),
-  employment_type: z.string().min(2, 'Employment type is required'),
-  date_of_joining: z.string().min(1, 'Date of joining is required'),
+// Schema for Add Employee (auto-creation API)
+const createEmployeeSchema = z.object({
+  email: z.string().email('Invalid email'),
+  first_name: z.string().min(2, 'First name required'),
+  last_name: z.string().min(2, 'Last name required'),
+  phone: z.string().optional(),
+  position: z.string().optional(),
+  department: z.string().optional(),
+  date_of_joining: z.string().optional(),
 });
 
-type EmployeeFormData = z.infer<typeof employeeSchema>;
+type CreateEmployeeFormData = z.infer<typeof createEmployeeSchema>;
 
 const ITEMS_PER_PAGE = 20;
 
 const EmployeesPage: React.FC = () => {
+  const router = useRouter();
   const { selectedCompany } = useCompany();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createMessage, setCreateMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [newEmployeeData, setNewEmployeeData] = useState<{ email: string; temporaryPassword: string; first_name: string; last_name: string } | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  const [showTempPasswordModal, setShowTempPasswordModal] = useState(false);
+  const [tempPasswordData, setTempPasswordData] = useState<{
+    employee_name: string;
+    employee_email: string;
+    temporaryPassword: string;
+    emailSent: boolean;
+  } | null>(null);
+  const [copiedTempPassword, setCopiedTempPassword] = useState(false);
+  const [generatingPassword, setGeneratingPassword] = useState<string | null>(null);
 
+  // Form for Add Employee (auto-creation)
   const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    setValue,
-    formState: { errors },
-  } = useForm<EmployeeFormData>({
-    resolver: zodResolver(employeeSchema),
+    register: registerCreate,
+    handleSubmit: handleSubmitCreate,
+    reset: resetCreate,
+    watch: watchCreate,
+    setValue: setValueCreate,
+    formState: { errors: errorsCreate },
+  } = useForm<CreateEmployeeFormData>({
+    resolver: zodResolver(createEmployeeSchema),
   });
 
-  const joiningDate = watch('date_of_joining');
+  const joiningDateCreate = watchCreate('date_of_joining');
+
+  // Copy password to clipboard
+  const copyPasswordToClipboard = () => {
+    if (newEmployeeData?.temporaryPassword) {
+      navigator.clipboard.writeText(newEmployeeData.temporaryPassword).then(() => {
+        setCopiedPassword(true);
+        setTimeout(() => setCopiedPassword(false), 2000);
+      });
+    }
+  };
+
+  // Handle auto-creation form submission
+  const onSubmitCreate = async (data: CreateEmployeeFormData) => {
+    try {
+      setCreateLoading(true);
+      setCreateMessage(null);
+
+      if (!selectedCompany) {
+        setCreateMessage({ type: 'error', text: 'Please select a company' });
+        return;
+      }
+
+      // Get current auth session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+
+      const response = await fetch('/api/admin/create-employee', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: data.email,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          company_id: selectedCompany.id,
+          phone: data.phone || '',
+          position: data.position || '',
+          department: data.department || '',
+          date_of_joining: data.date_of_joining || new Date().toISOString().split('T')[0],
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create employee');
+      }
+
+      if (result.success && result.data) {
+        setNewEmployeeData({
+          email: result.data.email,
+          temporaryPassword: result.data.temporaryPassword,
+          first_name: result.data.first_name,
+          last_name: result.data.last_name,
+        });
+        setCreateMessage({
+          type: 'success',
+          text: 'Employee created successfully! Share the temporary password with the employee.',
+        });
+        resetCreate();
+        fetchEmployees(currentPage);
+      } else {
+        throw new Error('Unexpected response format');
+      }
+    } catch (err) {
+      const errMsg = (err as any)?.message || (err as any)?.error?.message || 'Failed to create employee';
+      setCreateMessage({ type: 'error', text: errMsg });
+      console.error('Error creating employee:', err);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   // Fetch employees from database with pagination
   const fetchEmployees = async (page: number = 1) => {
@@ -89,8 +178,9 @@ const EmployeesPage: React.FC = () => {
       setEmployees(data || []);
       setCurrentPage(page);
     } catch (err) {
-      console.error('Error fetching employees:', err);
-      setMessage({ type: 'error', text: 'Failed to load employees' });
+      const errorMsg = (err as any)?.message || (err as any)?.error?.message || 'Failed to load employees';
+      console.error('Error fetching employees:', err, errorMsg);
+      setMessage({ type: 'error', text: errorMsg });
     } finally {
       setLoading(false);
     }
@@ -102,90 +192,82 @@ const EmployeesPage: React.FC = () => {
     fetchEmployees(1);
   }, [selectedCompany]);
 
-  const onSubmit = async (data: EmployeeFormData) => {
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    resetCreate();
+    setMessage(null);
+    setNewEmployeeData(null);
+    setCopiedPassword(false);
+  };
+
+  const generateTemporaryPassword = async (employeeId: string, employeeName: string) => {
     try {
-      setIsSubmitting(true);
-      setMessage(null);
+      setGeneratingPassword(employeeId);
 
       if (!selectedCompany) {
-        setMessage({ type: 'error', text: 'Please select a company' });
+        setMessage({ type: 'error', text: 'Please select a company first' });
+        setGeneratingPassword(null);
         return;
       }
 
-      if (editingId) {
-        // Update existing employee
-        const { error } = await supabase
-          .from('employees')
-          .update({
-            first_name: data.first_name,
-            last_name: data.last_name,
-            email: data.email,
-            phone: data.phone,
-            position: data.position,
-            department: data.department,
-            salary: data.salary,
-            employment_type: data.employment_type,
-            date_of_joining: data.date_of_joining,
-          })
-          .eq('id', editingId);
-
-        if (error) throw error;
-        setMessage({ type: 'success', text: 'Employee updated successfully' });
-      } else {
-        // Create new employee
-        const { error } = await supabase.from('employees').insert({
-          company_id: selectedCompany.id,
-          first_name: data.first_name,
-          last_name: data.last_name,
-          email: data.email,
-          phone: data.phone,
-          position: data.position,
-          department: data.department,
-          salary: data.salary,
-          employment_type: data.employment_type,
-          date_of_joining: data.date_of_joining,
-          status: 'Active',
-        });
-
-        if (error) throw error;
-        setMessage({ type: 'success', text: 'Employee added successfully' });
+      // Get current auth session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        setMessage({ type: 'error', text: 'Authentication required. Please log in again.' });
+        setGeneratingPassword(null);
+        return;
       }
 
-      reset();
-      setEditingId(null);
-      setShowModal(false);
-      fetchEmployees(currentPage);
-      setTimeout(() => setMessage(null), 3000);
+      const response = await fetch('/api/admin/generate-temp-password', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          company_id: selectedCompany?.id,
+          send_email: true,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to generate temporary password');
+      }
+
+      if (result.success && result.data) {
+        setTempPasswordData({
+          employee_name: result.data.employee_name,
+          employee_email: result.data.employee_email,
+          temporaryPassword: result.data.temporaryPassword,
+          emailSent: result.data.emailSent,
+        });
+        setShowTempPasswordModal(true);
+        setMessage({
+          type: 'success',
+          text: `New temporary password generated for ${employeeName}`,
+        });
+      } else {
+        throw new Error('Unexpected response format');
+      }
     } catch (err) {
-      const errMsg = (err as any)?.message || 'Failed to save employee';
-      setMessage({ type: 'error', text: errMsg });
-      console.error('Error saving employee:', err);
+      const errorMsg = (err as any)?.message || (err as any)?.error?.message || 'Failed to generate temporary password';
+      setMessage({ type: 'error', text: errorMsg });
+      console.error('Error generating temporary password:', err);
     } finally {
-      setIsSubmitting(false);
+      setGeneratingPassword(null);
     }
   };
 
-  const handleEdit = (employee: any) => {
-    reset({
-      first_name: employee.first_name,
-      last_name: employee.last_name,
-      email: employee.email,
-      phone: employee.phone,
-      position: employee.position,
-      department: employee.department,
-      salary: employee.salary,
-      employment_type: employee.employment_type,
-      date_of_joining: employee.date_of_joining,
-    });
-    setEditingId(employee.id);
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setEditingId(null);
-    reset();
-    setMessage(null);
+  const copyTempPasswordToClipboard = () => {
+    if (tempPasswordData?.temporaryPassword) {
+      navigator.clipboard.writeText(tempPasswordData.temporaryPassword).then(() => {
+        setCopiedTempPassword(true);
+        setTimeout(() => setCopiedTempPassword(false), 2000);
+      });
+    }
   };
 
   const deleteEmployee = async (id: string) => {
@@ -194,13 +276,35 @@ const EmployeesPage: React.FC = () => {
     try {
       setDeleteLoading(id);
       const { error } = await supabase.from('employees').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        // Extract error message from Supabase error object
+        let errorMsg = 'Failed to delete employee';
+        if (typeof error === 'object' && error !== null) {
+          if ('message' in error && error.message) {
+            errorMsg = String(error.message);
+          } else if ('details' in error && error.details) {
+            errorMsg = String(error.details);
+          } else if ('hint' in error && error.hint) {
+            errorMsg = String(error.hint);
+          }
+        }
+        throw new Error(errorMsg);
+      }
 
       setMessage({ type: 'success', text: 'Employee deleted successfully' });
       fetchEmployees(currentPage);
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to delete employee' });
+      let displayError = 'Failed to delete employee';
+      if (err instanceof Error) {
+        displayError = err.message;
+      } else if (typeof err === 'string') {
+        displayError = err;
+      } else if (typeof err === 'object' && err !== null) {
+        const errObj = err as any;
+        displayError = errObj.message || errObj.details || errObj.error?.message || JSON.stringify(err);
+      }
+      setMessage({ type: 'error', text: displayError });
       console.error('Error deleting employee:', err);
     } finally {
       setDeleteLoading(null);
@@ -245,18 +349,20 @@ const EmployeesPage: React.FC = () => {
     {
       key: 'salary',
       label: 'Salary',
-      render: (value: number) => `$${value.toLocaleString()}`,
+      render: (value: number | null) => value ? `$${value.toLocaleString()}` : '-',
     },
     {
       key: 'actions',
       label: 'Actions',
       render: (_: any, row: any) => (
         <div className="flex gap-2">
-          <button className="p-1 hover:bg-gray-200 rounded transition" title="View">
-            <Eye size={18} className="text-blue-600" />
-          </button>
-          <button onClick={() => handleEdit(row)} className="p-1 hover:bg-gray-200 rounded transition" title="Edit">
-            <Edit size={18} className="text-gray-600" />
+          <button
+            onClick={() => generateTemporaryPassword(row.id, `${row.first_name} ${row.last_name}`)}
+            disabled={generatingPassword === row.id}
+            className="p-1 hover:bg-gray-200 rounded transition disabled:opacity-50"
+            title="Generate New Password"
+          >
+            <Key size={18} className="text-orange-600" />
           </button>
           <button
             onClick={() => deleteEmployee(row.id)}
@@ -286,6 +392,22 @@ const EmployeesPage: React.FC = () => {
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Message Banner */}
+        {message && (
+          <div className={`p-4 rounded-lg border ${
+            message.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <div className="flex justify-between items-start">
+              <p className="font-medium">{message.text}</p>
+              <button onClick={() => setMessage(null)} className="text-xl leading-none opacity-70 hover:opacity-100">
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -294,15 +416,26 @@ const EmployeesPage: React.FC = () => {
               {selectedCompany ? `Manage employees at ${selectedCompany.name}` : 'Select a company to view employees'}
             </p>
           </div>
-          <Button
-            variant="primary"
-            onClick={() => setShowModal(true)}
-            disabled={!selectedCompany}
-            className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={20} />
-            Add Employee
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => router.push('/employees/import')}
+              disabled={!selectedCompany}
+              className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Upload size={20} />
+              Import CSV
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setShowCreateModal(true)}
+              disabled={!selectedCompany}
+              className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Plus size={20} />
+              Add Employee
+            </Button>
+          </div>
         </div>
 
         {!selectedCompany && (
@@ -430,168 +563,278 @@ const EmployeesPage: React.FC = () => {
         )}
       </div>
 
-      {/* Add/Edit Employee Modal */}
+      {/* Add Employee Modal (Auto-creation with Auth) */}
       <Modal
-        isOpen={showModal}
-        onClose={handleCloseModal}
-        title={editingId ? 'Edit Employee' : 'Add New Employee'}
+        isOpen={showCreateModal}
+        onClose={handleCloseCreateModal}
+        title="Create Employee"
         size="lg"
         footer={
-          <>
-            <Button variant="secondary" onClick={handleCloseModal}>
-              Cancel
+          newEmployeeData ? (
+            <Button variant="primary" onClick={handleCloseCreateModal}>
+              Close
             </Button>
-            <Button variant="primary" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
-              {isSubmitting ? (editingId ? 'Updating...' : 'Adding...') : (editingId ? 'Update Employee' : 'Add Employee')}
-            </Button>
-          </>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={handleCloseCreateModal}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleSubmitCreate(onSubmitCreate)} disabled={createLoading}>
+                {createLoading ? 'Creating...' : 'Create Employee'}
+              </Button>
+            </>
+          )
         }
       >
         <form className="space-y-4">
-          {message && (
+          {createMessage && (
             <div className={`p-3 rounded-lg ${
-              message.type === 'success'
+              createMessage.type === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
                 : 'bg-red-50 border border-red-200 text-red-700'
             }`}>
-              {message.text}
+              {createMessage.text}
             </div>
           )}
 
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs font-medium text-blue-600 uppercase">Company</p>
-            <p className="text-sm font-semibold text-gray-900 mt-1">{selectedCompany?.name}</p>
-            <p className="text-xs text-gray-600 mt-1">This employee will be added to this company</p>
-          </div>
+          {!newEmployeeData ? (
+            <>
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs font-medium text-blue-600 uppercase">Company</p>
+                <p className="text-sm font-semibold text-gray-900 mt-1">{selectedCompany?.name}</p>
+                <p className="text-xs text-gray-600 mt-1">Employee will be created with automatic account provisioning</p>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
-              <input
-                {...register('first_name')}
-                type="text"
-                placeholder="Enter first name"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.first_name && (
-                <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
-              <input
-                {...register('last_name')}
-                type="text"
-                placeholder="Enter last name"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.last_name && (
-                <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
-              )}
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                  <input
+                    {...registerCreate('first_name')}
+                    type="text"
+                    placeholder="Enter first name"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {errorsCreate.first_name && (
+                    <p className="mt-1 text-sm text-red-600">{errorsCreate.first_name.message}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                  <input
+                    {...registerCreate('last_name')}
+                    type="text"
+                    placeholder="Enter last name"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {errorsCreate.last_name && (
+                    <p className="mt-1 text-sm text-red-600">{errorsCreate.last_name.message}</p>
+                  )}
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input
-              {...register('email')}
-              type="email"
-              placeholder="Enter email address"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.email && (
-              <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-            )}
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <input
+                  {...registerCreate('email')}
+                  type="email"
+                  placeholder="Enter email address"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {errorsCreate.email && (
+                  <p className="mt-1 text-sm text-red-600">{errorsCreate.email.message}</p>
+                )}
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-            <input
-              {...register('phone')}
-              type="tel"
-              placeholder="Enter phone number"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {errors.phone && (
-              <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
-            )}
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <input
+                  {...registerCreate('phone')}
+                  type="tel"
+                  placeholder="Enter phone number (optional)"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {errorsCreate.phone && (
+                  <p className="mt-1 text-sm text-red-600">{errorsCreate.phone.message}</p>
+                )}
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
-              <input
-                {...register('position')}
-                type="text"
-                placeholder="Enter position"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.position && (
-                <p className="mt-1 text-sm text-red-600">{errors.position.message}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-              <select
-                {...register('department')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Department</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Sales">Sales</option>
-                <option value="HR & Admin">HR & Admin</option>
-                <option value="Operations">Operations</option>
-                <option value="Marketing">Marketing</option>
-              </select>
-              {errors.department && (
-                <p className="mt-1 text-sm text-red-600">{errors.department.message}</p>
-              )}
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                  <input
+                    {...registerCreate('position')}
+                    type="text"
+                    placeholder="Enter position (optional)"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {errorsCreate.position && (
+                    <p className="mt-1 text-sm text-red-600">{errorsCreate.position.message}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <select
+                    {...registerCreate('department')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Department (optional)</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Sales">Sales</option>
+                    <option value="HR & Admin">HR & Admin</option>
+                    <option value="Operations">Operations</option>
+                    <option value="Marketing">Marketing</option>
+                  </select>
+                  {errorsCreate.department && (
+                    <p className="mt-1 text-sm text-red-600">{errorsCreate.department.message}</p>
+                  )}
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Salary</label>
-              <input
-                {...register('salary', { valueAsNumber: true })}
-                type="number"
-                placeholder="Enter salary"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.salary && (
-                <p className="mt-1 text-sm text-red-600">{errors.salary.message}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
-              <select
-                {...register('employment_type')}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Type</option>
-                <option value="Full-Time">Full-Time</option>
-                <option value="Part-Time">Part-Time</option>
-                <option value="Contract">Contract</option>
-                <option value="Internship">Internship</option>
-              </select>
-              {errors.employment_type && (
-                <p className="mt-1 text-sm text-red-600">{errors.employment_type.message}</p>
-              )}
-            </div>
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
+                <DatePicker
+                  value={joiningDateCreate ?? ''}
+                  onChange={(date) => setValueCreate('date_of_joining', date)}
+                  placeholder="Select joining date (optional)"
+                />
+                {errorsCreate.date_of_joining && (
+                  <p className="mt-1 text-sm text-red-600">{errorsCreate.date_of_joining.message}</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-green-900 mb-3">Employee Created Successfully!</h3>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
-            <DatePicker
-              value={joiningDate}
-              onChange={(date) => setValue('date_of_joining', date)}
-              placeholder="Select joining date"
-            />
-            {errors.date_of_joining && (
-              <p className="mt-1 text-sm text-red-600">{errors.date_of_joining.message}</p>
-            )}
-          </div>
+                <div className="space-y-3">
+                  <div className="bg-white p-3 rounded-lg">
+                    <p className="text-xs text-gray-600 uppercase font-medium">Employee Name</p>
+                    <p className="text-lg font-semibold text-gray-900">{newEmployeeData.first_name} {newEmployeeData.last_name}</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-lg">
+                    <p className="text-xs text-gray-600 uppercase font-medium">Email Address</p>
+                    <p className="text-sm font-semibold text-gray-900 break-all">{newEmployeeData.email}</p>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-lg border-2 border-yellow-200">
+                    <p className="text-xs text-gray-600 uppercase font-medium mb-2">Temporary Password</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 px-3 py-2 bg-gray-100 rounded font-mono text-sm font-bold text-gray-900 break-all">
+                        {newEmployeeData.temporaryPassword}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={copyPasswordToClipboard}
+                        className="flex-shrink-0 p-2 hover:bg-gray-100 rounded transition"
+                        title="Copy password"
+                      >
+                        {copiedPassword ? (
+                          <Check size={20} className="text-green-600" />
+                        ) : (
+                          <Copy size={20} className="text-gray-600" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-yellow-700 mt-2">⚠️ Share this password securely with the employee. They must change it on first login.</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-700">
+                    ✓ Auth account created<br/>
+                    ✓ Employee record created<br/>
+                    ✓ Employee role assigned<br/>
+                    ✓ Company access configured
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </form>
+      </Modal>
+
+      {/* Generate Temporary Password Modal */}
+      <Modal
+        isOpen={showTempPasswordModal}
+        onClose={() => {
+          setShowTempPasswordModal(false);
+          setTempPasswordData(null);
+          setCopiedTempPassword(false);
+        }}
+        title="Temporary Password Generated"
+        size="lg"
+        footer={
+          <Button
+            variant="primary"
+            onClick={() => {
+              setShowTempPasswordModal(false);
+              setTempPasswordData(null);
+              setCopiedTempPassword(false);
+            }}
+          >
+            Close
+          </Button>
+        }
+      >
+        {tempPasswordData && (
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="text-sm font-semibold text-blue-900 mb-3">New Temporary Password Created</h3>
+
+              <div className="space-y-3">
+                <div className="bg-white p-3 rounded-lg">
+                  <p className="text-xs text-gray-600 uppercase font-medium">Employee Name</p>
+                  <p className="text-lg font-semibold text-gray-900">{tempPasswordData.employee_name}</p>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg">
+                  <p className="text-xs text-gray-600 uppercase font-medium">Email Address</p>
+                  <p className="text-sm font-semibold text-gray-900 break-all">{tempPasswordData.employee_email}</p>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border-2 border-orange-200">
+                  <p className="text-xs text-gray-600 uppercase font-medium mb-2">Temporary Password</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 px-3 py-2 bg-gray-100 rounded font-mono text-sm font-bold text-gray-900 break-all">
+                      {tempPasswordData.temporaryPassword}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={copyTempPasswordToClipboard}
+                      className="flex-shrink-0 p-2 hover:bg-gray-100 rounded transition"
+                      title="Copy password"
+                    >
+                      {copiedTempPassword ? (
+                        <Check size={20} className="text-green-600" />
+                      ) : (
+                        <Copy size={20} className="text-gray-600" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-orange-700 mt-2">⚠️ Share this password securely with the employee. They must change it on first login.</p>
+                </div>
+
+                {tempPasswordData.emailSent && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      ✓ Welcome email with new password has been sent to {tempPasswordData.employee_email}
+                    </p>
+                  </div>
+                )}
+
+                {!tempPasswordData.emailSent && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Email could not be sent. Please share the password manually with the employee.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </Layout>
   );

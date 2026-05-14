@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import {
@@ -21,17 +21,20 @@ import {
 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 const MENU_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/employee-dashboard', label: 'My Dashboard', icon: LayoutDashboard, requiredRole: 'Employee' },
+  { href: '/manager-dashboard', label: 'Team Dashboard', icon: BarChart3, requiredRole: 'Department Manager' },
   { href: '/employees', label: 'Employees', icon: Users },
   { href: '/companies', label: 'Companies', icon: Building2 },
   { href: '/attendance', label: 'Attendance', icon: Calendar },
   { href: '/leave', label: 'Leave Management', icon: Users },
+  { href: '/leaves', label: 'Leaves', icon: Users },
   { href: '/payroll', label: 'Payroll', icon: DollarSign },
   { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const ADMIN_MENU_ITEMS = [
@@ -45,35 +48,97 @@ const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { selectedCompany } = useCompany();
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
+  const [allowedModulePaths, setAllowedModulePaths] = useState<Set<string>>(new Set());
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
+  // Load allowed modules for user
+  useEffect(() => {
+    const loadAllowedModules = async () => {
+      if (!user?.roles || user.roles.length === 0) {
+        console.log('🔐 No roles found, allowing basic dashboard');
+        setAllowedModulePaths(new Set(['/dashboard']));
+        return;
+      }
+
+      try {
+        const roleIds = user.roles.map(r => r.role_id);
+        console.log('📋 Loading allowed modules for roleIds:', roleIds);
+
+        // Fetch modules to get paths
+        const { data: modulesData, error: modulesError } = await supabase
+          .from('modules')
+          .select('id, path');
+
+        // Get module IDs from role_modules for this user's roles
+        const { data: rmData, error: rmError } = await supabase
+          .from('role_modules')
+          .select('module_id')
+          .in('role_id', roleIds);
+
+        if (!modulesError && !rmError && modulesData && rmData) {
+          // Create a set of allowed module IDs
+          const allowedModuleIds = new Set<string>();
+          rmData.forEach(rm => allowedModuleIds.add(rm.module_id));
+
+          console.log('📦 Allowed module IDs:', Array.from(allowedModuleIds));
+
+          // Map module IDs to paths
+          const allowedPaths = new Set<string>();
+          modulesData.forEach(module => {
+            if (allowedModuleIds.has(module.id)) {
+              allowedPaths.add(module.path);
+            }
+          });
+
+          console.log('✅ Allowed module paths:', Array.from(allowedPaths));
+          setAllowedModulePaths(allowedPaths);
+        } else {
+          console.log('⚠️ Error loading modules:', { modulesError, rmError });
+          console.log('⚠️ Allowing only dashboard');
+          setAllowedModulePaths(new Set(['/dashboard']));
+        }
+      } catch (err) {
+        console.error('❌ Error loading allowed modules:', err);
+        setAllowedModulePaths(new Set(['/dashboard']));
+      }
+    };
+
+    loadAllowedModules();
+  }, [user]);
+
+  const handleLogout = () => {
+    console.log('🚪 Logout button clicked from sidebar, navigating to /logout page');
+    router.push('/logout');
   };
 
   // Check if user is admin
-  const isAdmin = user?.roles?.some(role => 
-    role.role_name === 'Super Admin' || 
+  console.log('🔐 Sidebar checking user:', user);
+  console.log('🔐 User roles from context:', user?.roles);
+  const isAdmin = user?.roles?.some(role =>
+    role.role_name === 'Super Admin' ||
     role.role_name === 'Company Admin' ||
     role.role_name === 'HR Manager'
   );
+  console.log('🔐 isAdmin result:', isAdmin);
+  console.log('🔐 Checking for role_name:', user?.roles?.map(r => ({ id: r.id, role_name: r.role_name })));
 
-  // Filter admin items based on user's actual permissions
+  // Filter admin items based on user's actual permissions and allowed modules
   const visibleAdminItems = ADMIN_MENU_ITEMS.filter(item => {
+    // First check if module is allowed
+    if (!allowedModulePaths.has(item.href)) {
+      return false;
+    }
+
+    // Then check role requirement
     if (item.requiredRole === 'Company Admin') {
       return user?.roles?.some(r => r.role_name === 'Super Admin' || r.role_name === 'Company Admin');
     }
     if (item.requiredRole === 'HR Manager') {
-      return user?.roles?.some(r => 
-        r.role_name === 'Super Admin' || 
-        r.role_name === 'Company Admin' || 
+      return user?.roles?.some(r =>
+        r.role_name === 'Super Admin' ||
+        r.role_name === 'Company Admin' ||
         r.role_name === 'HR Manager'
       );
     }
@@ -106,6 +171,24 @@ const Sidebar: React.FC = () => {
 
         <nav className="p-4 space-y-2">
           {MENU_ITEMS.map((item) => {
+            // Check if module is allowed for user
+            const isModuleAllowed = allowedModulePaths.has(item.href);
+
+            if (!isModuleAllowed) {
+              console.log(`🚫 Module not allowed: ${item.href}`);
+              return null;
+            }
+
+            // Filter menu items based on required role
+            const hasRequiredRole = !('requiredRole' in item) ||
+              user?.roles?.some(role =>
+                role.role_name === (item as any).requiredRole ||
+                role.role_name === 'Super Admin' ||
+                role.role_name === 'Company Admin'
+              );
+
+            if (!hasRequiredRole) return null;
+
             const Icon = item.icon;
             const active = isActive(item.href);
 
@@ -165,7 +248,10 @@ const Sidebar: React.FC = () => {
             <span>Profile Settings</span>
           </Link>
           <button
-            onClick={handleLogout}
+            onClick={() => {
+              handleLogout();
+              setSidebarOpen(false);
+            }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors text-left"
           >
             <LogOut size={20} />

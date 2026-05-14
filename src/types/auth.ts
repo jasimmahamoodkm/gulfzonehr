@@ -13,6 +13,13 @@ export interface SignupPayload {
   password: string;
 }
 
+export interface UserCompany {
+  company_id: string;
+  company_name: string;
+  is_primary: boolean;
+  assigned_at: string;
+}
+
 export interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -22,8 +29,12 @@ export interface AuthContextType {
   signup: (payload: SignupPayload) => Promise<void>;
   logout: () => Promise<void>;
   updatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  completePasswordChange: (newPassword: string) => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
   hasPermission: (resource: string, action: string) => PermissionCheckResult;
+  userCompanies: UserCompany[];
+  selectedCompanyId: string | null;
+  switchCompany: (companyId: string) => Promise<void>;
 }
 
 export interface AuthError {
