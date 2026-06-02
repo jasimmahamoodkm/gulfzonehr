@@ -93,90 +93,30 @@ ALTER TABLE public.activity_logs         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leave_approvers       ENABLE ROW LEVEL SECURITY;
 
 -- ─────────────────────────────────────────
--- STEP 3: Drop ALL existing broken policies
+-- STEP 3: Drop ALL existing policies on
+-- affected tables (dynamic — catches any
+-- policy name regardless of what it is)
 -- ─────────────────────────────────────────
-
--- users
-DROP POLICY IF EXISTS users_read_own_profile       ON public.users;
-DROP POLICY IF EXISTS users_admin_read_all         ON public.users;
-DROP POLICY IF EXISTS users_service_read           ON public.users;
-DROP POLICY IF EXISTS users_update_own             ON public.users;
-DROP POLICY IF EXISTS users_insert                 ON public.users;
-DROP POLICY IF EXISTS users_authenticated_read     ON public.users;
-DROP POLICY IF EXISTS "Users can read their own profile" ON public.users;
-DROP POLICY IF EXISTS users_admin_read             ON public.users;
-
--- employees
-DROP POLICY IF EXISTS employees_company_policy     ON public.employees;
-DROP POLICY IF EXISTS employees_read               ON public.employees;
-DROP POLICY IF EXISTS employees_write              ON public.employees;
-
--- companies
-DROP POLICY IF EXISTS companies_policy             ON public.companies;
-DROP POLICY IF EXISTS companies_read               ON public.companies;
-DROP POLICY IF EXISTS companies_write              ON public.companies;
-
--- attendance
-DROP POLICY IF EXISTS attendance_policy            ON public.attendance;
-DROP POLICY IF EXISTS attendance_read              ON public.attendance;
-DROP POLICY IF EXISTS attendance_write             ON public.attendance;
-
--- payroll
-DROP POLICY IF EXISTS payroll_policy               ON public.payroll;
-DROP POLICY IF EXISTS payroll_read                 ON public.payroll;
-DROP POLICY IF EXISTS payroll_write                ON public.payroll;
-
--- roles
-DROP POLICY IF EXISTS roles_read_policy            ON public.roles;
-DROP POLICY IF EXISTS roles_write_policy           ON public.roles;
-DROP POLICY IF EXISTS roles_admin_select_policy    ON public.roles;
-DROP POLICY IF EXISTS roles_admin_write_policy     ON public.roles;
-
--- user_roles
-DROP POLICY IF EXISTS user_roles_read_policy       ON public.user_roles;
-DROP POLICY IF EXISTS user_roles_write_policy      ON public.user_roles;
-DROP POLICY IF EXISTS user_roles_admin_policy      ON public.user_roles;
-
--- role_permissions
-DROP POLICY IF EXISTS role_permissions_view_policy   ON public.role_permissions;
-DROP POLICY IF EXISTS role_permissions_insert_policy ON public.role_permissions;
-DROP POLICY IF EXISTS role_permissions_update_policy ON public.role_permissions;
-DROP POLICY IF EXISTS role_permissions_delete_policy ON public.role_permissions;
-
--- leaves
-DROP POLICY IF EXISTS leaves_employee_policy       ON public.leaves;
-DROP POLICY IF EXISTS leaves_read                  ON public.leaves;
-DROP POLICY IF EXISTS leaves_write                 ON public.leaves;
-
--- leave_types
-DROP POLICY IF EXISTS leave_types_policy           ON public.leave_types;
-DROP POLICY IF EXISTS leave_types_insert_policy    ON public.leave_types;
-DROP POLICY IF EXISTS leave_types_update_policy    ON public.leave_types;
-DROP POLICY IF EXISTS leave_types_delete_policy    ON public.leave_types;
-
--- employee_leave_balance
-DROP POLICY IF EXISTS leave_balance_policy         ON public.employee_leave_balance;
-
--- leave_approvers
-DROP POLICY IF EXISTS leave_approvers_policy       ON public.leave_approvers;
-
--- audit_logs
-DROP POLICY IF EXISTS audit_logs_admin_policy      ON public.audit_logs;
-DROP POLICY IF EXISTS audit_logs_insert_policy     ON public.audit_logs;
-
--- activity_logs
-DROP POLICY IF EXISTS activity_logs_policy         ON public.activity_logs;
-DROP POLICY IF EXISTS activity_logs_insert_policy  ON public.activity_logs;
-
--- documents
-DROP POLICY IF EXISTS "Allow users to see company documents"           ON public.documents;
-DROP POLICY IF EXISTS "Allow users to insert documents for their company" ON public.documents;
-DROP POLICY IF EXISTS "Allow users to update company documents"        ON public.documents;
-DROP POLICY IF EXISTS "Allow users to delete company documents"        ON public.documents;
-
--- modules / role_modules
-DROP POLICY IF EXISTS modules_read                 ON public.modules;
-DROP POLICY IF EXISTS role_modules_read            ON public.role_modules;
+DO $$
+DECLARE
+  rec record;
+BEGIN
+  FOR rec IN
+    SELECT policyname, tablename
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'users', 'employees', 'companies', 'attendance', 'payroll',
+        'roles', 'user_roles', 'role_permissions', 'leaves',
+        'leave_types', 'employee_leave_balance', 'leave_approvers',
+        'audit_logs', 'activity_logs', 'documents', 'modules',
+        'role_modules', 'user_companies', 'audit_log_policies'
+      )
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', rec.policyname, rec.tablename);
+  END LOOP;
+END;
+$$;
 
 -- user_companies
 DROP POLICY IF EXISTS user_companies_select_own    ON public.user_companies;

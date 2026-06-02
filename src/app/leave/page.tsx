@@ -109,6 +109,7 @@ const LeaveManagementPage: React.FC = () => {
         days,
         reason: data.reason,
         status: 'Pending',
+        approval_status: 'pending',
       });
 
       if (error) throw error;

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -23,61 +24,135 @@ interface PendingLeave {
 
 export default function LeaveApprovalsPage() {
   const { user } = useAuth();
+  const { selectedCompany } = useCompany();
   const [leaves, setLeaves] = useState<PendingLeave[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [approvalComments, setApprovalComments] = useState<Record<string, string>>({});
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
   const [processingLeaveId, setProcessingLeaveId] = useState<string | null>(null);
 
+  // Use selectedCompany first, fall back to user.company_id
+  const companyId = selectedCompany?.id || user?.company_id || '';
+
   useEffect(() => {
-    if (!user?.company_id) return;
+    if (!companyId) return;
     loadPendingLeaves();
-  }, [user]);
+  }, [companyId]);
 
   const loadPendingLeaves = async () => {
+    if (!companyId) return;
     try {
       setLoading(true);
+      setPageError(null);
 
-      const { data, error } = await supabase
+      // Step 1: Get all employee IDs for this company
+      const { data: companyEmps, error: empFetchError } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name')
+        .eq('company_id', companyId);
+
+      if (empFetchError) {
+        throw new Error(empFetchError.message || JSON.stringify(empFetchError));
+      }
+
+      if (!companyEmps || companyEmps.length === 0) {
+        setLeaves([]);
+        return;
+      }
+
+      const empIds = companyEmps.map(e => e.id);
+
+      // Step 2: Fetch pending leaves filtered by employee IDs (avoids leaves.company_id)
+      const { data: leavesData, error: leavesError } = await supabase
         .from('leaves')
-        .select(`
-          id,
-          employee_id,
-          employees(first_name, last_name),
-          leave_type,
-          start_date,
-          end_date,
-          days,
-          reason,
-          created_at,
-          company_id
-        `)
-        .eq('company_id', user?.company_id || '')
+        .select('id, employee_id, leave_type, start_date, end_date, days, reason, created_at')
+        .in('employee_id', empIds)
         .eq('approval_status', 'pending')
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (leavesError) {
+        throw new Error(leavesError.message || JSON.stringify(leavesError));
+      }
 
-      // Transform data
-      const transformedLeaves: PendingLeave[] = (data || []).map(leave => ({
+      if (!leavesData || leavesData.length === 0) {
+        setLeaves([]);
+        return;
+      }
+
+      // Step 3: Build employee name map from already-fetched company employees
+      const empData = companyEmps;
+
+      const empMap: Record<string, string> = {};
+      (empData || []).forEach((e: any) => {
+        empMap[e.id] = `${e.first_name} ${e.last_name}`;
+      });
+
+      const transformedLeaves: PendingLeave[] = leavesData.map(leave => ({
         id: leave.id,
         employee_id: leave.employee_id,
-        employee_name: `${(leave.employees as any)?.first_name} ${(leave.employees as any)?.last_name}`,
+        employee_name: empMap[leave.employee_id] || 'Unknown Employee',
         leave_type: leave.leave_type,
         start_date: leave.start_date,
         end_date: leave.end_date,
         days: leave.days,
         reason: leave.reason,
         created_at: leave.created_at,
-        company_id: leave.company_id,
+        company_id: companyId,
       }));
 
       setLeaves(transformedLeaves);
     } catch (err) {
-      console.error('Error loading pending leaves:', err);
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      console.error('Error loading pending leaves:', msg);
+      setPageError(msg);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Increment used_days in employee_leave_balance when a leave is approved
+  const updateLeaveBalance = async (employeeId: string, leaveTypeName: string, days: number, leaveCompanyId: string) => {
+    try {
+      const year = new Date().getFullYear();
+
+      // Find the leave_type_id by matching name within the company
+      const { data: ltData } = await supabase
+        .from('leave_types')
+        .select('id')
+        .eq('company_id', leaveCompanyId)
+        .ilike('name', leaveTypeName)
+        .maybeSingle();
+
+      if (!ltData?.id) return; // leave type not found in new system — skip
+
+      // Read current balance
+      const { data: balance } = await supabase
+        .from('employee_leave_balance')
+        .select('id, used_days')
+        .eq('employee_id', employeeId)
+        .eq('leave_type_id', ltData.id)
+        .eq('year', year)
+        .maybeSingle();
+
+      if (balance?.id) {
+        // Update existing record
+        await supabase
+          .from('employee_leave_balance')
+          .update({ used_days: (balance.used_days || 0) + days })
+          .eq('id', balance.id);
+      } else {
+        // Insert if record doesn't exist yet
+        await supabase.from('employee_leave_balance').insert({
+          employee_id: employeeId,
+          leave_type_id: ltData.id,
+          year,
+          total_days: 0,
+          used_days: days,
+          pending_days: 0,
+        });
+      }
+    } catch { /* non-critical — don't block approval */ }
   };
 
   const handleApproveLeave = async (leaveId: string) => {
@@ -91,6 +166,7 @@ export default function LeaveApprovalsPage() {
         .from('leaves')
         .update({
           approval_status: 'approved',
+          status: 'Approved',
           approved_by: user.id,
           approval_date: new Date().toISOString(),
           manager_comments: approvalComments[leaveId] || null,
@@ -98,6 +174,12 @@ export default function LeaveApprovalsPage() {
         .eq('id', leaveId);
 
       if (updateError) throw updateError;
+
+      // Update employee_leave_balance.used_days for this leave type + year
+      const leave = leaves.find(l => l.id === leaveId);
+      if (leave) {
+        await updateLeaveBalance(leave.employee_id, leave.leave_type, leave.days, leave.company_id);
+      }
 
       // Log audit event
       await logAuditEvent({
@@ -148,6 +230,7 @@ export default function LeaveApprovalsPage() {
         .from('leaves')
         .update({
           approval_status: 'rejected',
+          status: 'Rejected',
           approved_by: user.id,
           approval_date: new Date().toISOString(),
           rejection_reason: rejectionReasons[leaveId],
@@ -217,6 +300,18 @@ export default function LeaveApprovalsPage() {
             Manage pending leave requests {leaves.length > 0 && `(${leaves.length} pending)`}
           </p>
         </div>
+
+        {pageError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <strong>Error:</strong> {pageError}
+          </div>
+        )}
+
+        {!companyId && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+            Please select a company to view pending leave requests.
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

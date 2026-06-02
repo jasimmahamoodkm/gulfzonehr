@@ -11,7 +11,7 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { Search, Plus, Trash2, Copy, Check, Upload, Key } from 'lucide-react';
+import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 
@@ -24,6 +24,7 @@ const createEmployeeSchema = z.object({
   position: z.string().optional(),
   department: z.string().optional(),
   date_of_joining: z.string().optional(),
+  grade_id: z.string().optional(),
 });
 
 type CreateEmployeeFormData = z.infer<typeof createEmployeeSchema>;
@@ -56,6 +57,28 @@ const EmployeesPage: React.FC = () => {
   } | null>(null);
   const [copiedTempPassword, setCopiedTempPassword] = useState(false);
   const [generatingPassword, setGeneratingPassword] = useState<string | null>(null);
+
+  // Grade assignment state
+  const [grades, setGrades] = useState<{ id: string; name: string; level: number; salary?: number; currency?: string }[]>([]);
+  const [showGradeModal, setShowGradeModal] = useState(false);
+  const [gradeTarget, setGradeTarget] = useState<{ id: string; name: string; currentGradeId: string | null } | null>(null);
+  const [selectedGradeId, setSelectedGradeId] = useState<string>('');
+  const [savingGrade, setSavingGrade] = useState(false);
+
+  // Edit Employee state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTarget, setEditTarget] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    last_name: '',
+    position: '',
+    department: '',
+    employment_type: '',
+    status: '',
+    date_of_joining: '',
+    grade_id: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Form for Add Employee (auto-creation)
   const {
@@ -113,6 +136,7 @@ const EmployeesPage: React.FC = () => {
           position: data.position || '',
           department: data.department || '',
           date_of_joining: data.date_of_joining || new Date().toISOString().split('T')[0],
+          grade_id: data.grade_id || null,
         }),
       });
 
@@ -147,6 +171,42 @@ const EmployeesPage: React.FC = () => {
     }
   };
 
+  // Fetch grades for the selected company (for grade assignment dropdown + salary display)
+  const fetchGrades = async (companyId: string) => {
+    try {
+      const { data: gradesData, error } = await supabase
+        .from('employee_grades')
+        .select('id, name, level')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .order('level', { ascending: true });
+
+      if (error || !gradesData) return;
+
+      // Fetch current salary config for all grades in one query
+      const gradeIds = gradesData.map((g) => g.id);
+      const today = new Date().toISOString().split('T')[0];
+      const { data: salaryData } = await supabase
+        .from('grade_salary_config')
+        .select('grade_id, salary, currency, effective_from')
+        .in('grade_id', gradeIds.length > 0 ? gradeIds : ['00000000-0000-0000-0000-000000000000'])
+        .lte('effective_from', today)
+        .order('effective_from', { ascending: false });
+
+      // Pick the most recent salary config per grade
+      const salaryMap: Record<string, { salary: number; currency: string }> = {};
+      (salaryData || []).forEach((s: any) => {
+        if (!salaryMap[s.grade_id]) {
+          salaryMap[s.grade_id] = { salary: s.salary, currency: s.currency };
+        }
+      });
+
+      setGrades(gradesData.map((g) => ({ ...g, ...salaryMap[g.id] })));
+    } catch {
+      // grades are optional — silent fail
+    }
+  };
+
   // Fetch employees from database with pagination
   const fetchEmployees = async (page: number = 1) => {
     try {
@@ -166,10 +226,10 @@ const EmployeesPage: React.FC = () => {
 
       setTotalCount(count || 0);
 
-      // Fetch paginated data
+      // Fetch paginated data — include grade info
       const { data, error } = await supabase
         .from('employees')
-        .select('id,first_name,last_name,email,phone,position,department,salary,employment_type,date_of_joining,status,created_at')
+        .select('id,first_name,last_name,email,phone,position,department,employment_type,date_of_joining,status,created_at,grade_id,employee_grades(name,level)')
         .eq('company_id', selectedCompany.id)
         .order('created_at', { ascending: false })
         .range(offset, offset + ITEMS_PER_PAGE - 1);
@@ -190,7 +250,115 @@ const EmployeesPage: React.FC = () => {
   React.useEffect(() => {
     setCurrentPage(1);
     fetchEmployees(1);
+    if (selectedCompany) fetchGrades(selectedCompany.id);
   }, [selectedCompany]);
+
+  // Open the grade assignment modal for a specific employee
+  const openGradeModal = (employee: any) => {
+    setGradeTarget({
+      id: employee.id,
+      name: `${employee.first_name} ${employee.last_name}`,
+      currentGradeId: employee.grade_id ?? null,
+    });
+    setSelectedGradeId(employee.grade_id ?? '');
+    setShowGradeModal(true);
+  };
+
+  const saveGradeAssignment = async () => {
+    if (!gradeTarget) return;
+    try {
+      setSavingGrade(true);
+      const { error } = await supabase
+        .from('employees')
+        .update({ grade_id: selectedGradeId || null })
+        .eq('id', gradeTarget.id);
+
+      if (error) throw error;
+
+      // Auto-init leave balances for the newly assigned grade
+      if (selectedGradeId && selectedCompany) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            await fetch('/api/admin/employees/init-leave-balance', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                employee_id: gradeTarget.id,
+                grade_id: selectedGradeId,
+                company_id: selectedCompany.id,
+              }),
+            });
+          }
+        } catch {
+          // Non-blocking — don't fail the grade save if leave init fails
+        }
+      }
+
+      setMessage({ type: 'success', text: `Grade updated for ${gradeTarget.name}` });
+      setTimeout(() => setMessage(null), 3000);
+      setShowGradeModal(false);
+      setGradeTarget(null);
+      fetchEmployees(currentPage);
+    } catch (err) {
+      const errorMsg = (err as any)?.message || 'Failed to update grade';
+      setMessage({ type: 'error', text: errorMsg });
+    } finally {
+      setSavingGrade(false);
+    }
+  };
+
+  // Open edit modal pre-filled with employee data
+  const openEditModal = (employee: any) => {
+    setEditTarget(employee);
+    setEditForm({
+      first_name: employee.first_name ?? '',
+      last_name: employee.last_name ?? '',
+      position: employee.position ?? '',
+      department: employee.department ?? '',
+      employment_type: employee.employment_type ?? '',
+      status: employee.status ?? '',
+      date_of_joining: employee.date_of_joining ?? '',
+      grade_id: employee.grade_id ?? '',
+    });
+    setShowEditModal(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget) return;
+    try {
+      setSavingEdit(true);
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          position: editForm.position || null,
+          department: editForm.department || null,
+          employment_type: editForm.employment_type || null,
+          status: editForm.status || null,
+          date_of_joining: editForm.date_of_joining || null,
+          grade_id: editForm.grade_id || null,
+        })
+        .eq('id', editTarget.id);
+
+      if (error) throw error;
+
+      setMessage({ type: 'success', text: `Employee ${editForm.first_name} ${editForm.last_name} updated successfully` });
+      setTimeout(() => setMessage(null), 3000);
+      setShowEditModal(false);
+      setEditTarget(null);
+      fetchEmployees(currentPage);
+    } catch (err) {
+      const errorMsg = (err as any)?.message || 'Failed to update employee';
+      setMessage({ type: 'error', text: errorMsg });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
@@ -330,6 +498,33 @@ const EmployeesPage: React.FC = () => {
       label: 'Department',
     },
     {
+      key: 'grade_id',
+      label: 'Grade',
+      render: (_: any, row: any) => {
+        const grade = row.employee_grades as { name: string; level: number } | null;
+        if (grade) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+              <Award size={11} />
+              {grade.name}
+            </span>
+          );
+        }
+        return <span className="text-xs text-gray-400 italic">Unassigned</span>;
+      },
+    },
+    {
+      key: 'grade_salary',
+      label: 'Salary',
+      render: (_: any, row: any) => {
+        const grade = grades.find((g) => g.id === row.grade_id);
+        if (grade?.salary != null) {
+          return `${grade.currency || 'AED'} ${Number(grade.salary).toLocaleString()}`;
+        }
+        return <span className="text-xs text-gray-400 italic">—</span>;
+      },
+    },
+    {
       key: 'status',
       label: 'Status',
       render: (value: string) => (
@@ -347,15 +542,24 @@ const EmployeesPage: React.FC = () => {
       ),
     },
     {
-      key: 'salary',
-      label: 'Salary',
-      render: (value: number | null) => value ? `$${value.toLocaleString()}` : '-',
-    },
-    {
       key: 'actions',
       label: 'Actions',
       render: (_: any, row: any) => (
         <div className="flex gap-2">
+          <button
+            onClick={() => openEditModal(row)}
+            className="p-1 hover:bg-gray-200 rounded transition"
+            title="Edit Employee"
+          >
+            <Edit2 size={18} className="text-blue-600" />
+          </button>
+          <button
+            onClick={() => openGradeModal(row)}
+            className="p-1 hover:bg-gray-200 rounded transition"
+            title="Assign Grade"
+          >
+            <Award size={18} className="text-purple-600" />
+          </button>
           <button
             onClick={() => generateTemporaryPassword(row.id, `${row.first_name} ${row.last_name}`)}
             disabled={generatingPassword === row.id}
@@ -691,6 +895,29 @@ const EmployeesPage: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+                {grades.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic py-2">
+                    No grades configured.{' '}
+                    <a href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</a>.
+                  </p>
+                ) : (
+                  <select
+                    {...registerCreate('grade_id')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Grade (optional)</option>
+                    {grades.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} (Level {g.level})
+                        {g.salary != null ? ` — ${g.currency || 'AED'} ${Number(g.salary).toLocaleString()}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
                 <DatePicker
                   value={joiningDateCreate ?? ''}
@@ -753,6 +980,206 @@ const EmployeesPage: React.FC = () => {
             </div>
           )}
         </form>
+      </Modal>
+
+      {/* Assign Grade Modal */}
+      <Modal
+        isOpen={showGradeModal}
+        onClose={() => { setShowGradeModal(false); setGradeTarget(null); }}
+        title="Assign Grade"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowGradeModal(false); setGradeTarget(null); }}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveGradeAssignment} disabled={savingGrade}>
+              {savingGrade ? 'Saving...' : 'Save'}
+            </Button>
+          </>
+        }
+      >
+        {gradeTarget && (
+          <div className="space-y-4">
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs text-gray-500 uppercase font-medium">Employee</p>
+              <p className="text-sm font-semibold text-gray-900 mt-0.5">{gradeTarget.name}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Grade
+              </label>
+              {grades.length === 0 ? (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                  No grades configured yet.{' '}
+                  <a href="/admin/grades" className="underline font-medium">Create grades first</a>.
+                </div>
+              ) : (
+                <select
+                  value={selectedGradeId}
+                  onChange={(e) => setSelectedGradeId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">— Remove grade assignment —</option>
+                  {grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} (Level {g.level})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {selectedGradeId && (() => {
+              const g = grades.find(x => x.id === selectedGradeId);
+              return g ? (
+                <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <Award size={16} className="text-purple-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-purple-900">{g.name}</p>
+                    <p className="text-xs text-purple-600">Level {g.level}</p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Employee Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => { setShowEditModal(false); setEditTarget(null); }}
+        title="Edit Employee"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowEditModal(false); setEditTarget(null); }}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveEdit} disabled={savingEdit}>
+              {savingEdit ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </>
+        }
+      >
+        {editTarget && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                <input
+                  type="text"
+                  value={editForm.first_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                <input
+                  type="text"
+                  value={editForm.last_name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                <input
+                  type="text"
+                  value={editForm.position}
+                  onChange={(e) => setEditForm((f) => ({ ...f, position: e.target.value }))}
+                  placeholder="e.g. Software Engineer"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                <select
+                  value={editForm.department}
+                  onChange={(e) => setEditForm((f) => ({ ...f, department: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Department</option>
+                  <option value="Engineering">Engineering</option>
+                  <option value="Sales">Sales</option>
+                  <option value="HR & Admin">HR & Admin</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Marketing">Marketing</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
+                <select
+                  value={editForm.employment_type}
+                  onChange={(e) => setEditForm((f) => ({ ...f, employment_type: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Employment Type</option>
+                  <option value="Full-Time">Full-Time</option>
+                  <option value="Part-Time">Part-Time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Intern">Intern</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="Terminated">Terminated</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
+              <DatePicker
+                value={editForm.date_of_joining}
+                onChange={(date) => setEditForm((f) => ({ ...f, date_of_joining: date }))}
+                placeholder="Select joining date"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+              {grades.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-2">
+                  No grades configured.{' '}
+                  <a href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</a>.
+                </p>
+              ) : (
+                <select
+                  value={editForm.grade_id}
+                  onChange={(e) => setEditForm((f) => ({ ...f, grade_id: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">— No grade —</option>
+                  {grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} (Level {g.level})
+                      {g.salary != null ? ` — ${g.currency || 'AED'} ${Number(g.salary).toLocaleString()}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Generate Temporary Password Modal */}

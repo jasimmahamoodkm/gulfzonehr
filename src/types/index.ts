@@ -44,10 +44,90 @@ export interface Employee {
   salary: number;
   employment_type: 'Full-Time' | 'Part-Time' | 'Contract' | 'Intern';
   status: 'Active' | 'Inactive' | 'On Leave' | 'Terminated';
+  grade_id?: string;
+  grade?: EmployeeGrade;
   driving_license?: Document;
   passport?: Document;
   emirates_id?: Document;
   documents?: Document[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Grade / Benefits Configuration Types
+// ============================================================
+
+export interface EmployeeGrade {
+  id: string;
+  company_id: string;
+  name: string;
+  level: number;
+  description?: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  /** Joined via grade_summary view */
+  employee_count?: number;
+  salary?: number;
+  currency?: string;
+}
+
+export type BenefitType =
+  | 'Health Insurance'
+  | 'Housing Allowance'
+  | 'Transport Allowance'
+  | 'Education Allowance'
+  | 'Annual Bonus'
+  | 'Performance Bonus'
+  | 'Meal Allowance'
+  | 'Phone Allowance'
+  | 'Annual Flight Ticket'
+  | 'Gratuity'
+  | 'Pension'
+  | 'Other';
+
+export type BenefitValueType = 'fixed' | 'percentage';
+
+export interface GradeLeaveConfig {
+  id: string;
+  grade_id: string;
+  company_id: string;
+  leave_type_id: string;
+  days_per_year: number;
+  carry_forward_days: number;
+  carry_forward_expiry_months: number;
+  year?: number | null;
+  created_at: string;
+  updated_at: string;
+  /** Joined from leave_types */
+  leave_type_name?: string;
+  leave_type_color?: string;
+}
+
+export interface GradeSalaryConfig {
+  id: string;
+  grade_id: string;
+  company_id: string;
+  salary: number;
+  currency: string;
+  effective_from: string;
+  effective_to?: string | null;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GradeBenefit {
+  id: string;
+  grade_id: string;
+  company_id: string;
+  benefit_type: BenefitType;
+  benefit_value?: number | null;
+  value_type: BenefitValueType;
+  currency: string;
+  description?: string;
+  active: boolean;
   created_at: string;
   updated_at: string;
 }

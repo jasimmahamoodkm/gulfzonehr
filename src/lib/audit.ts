@@ -17,9 +17,12 @@ const supabase = createClient(
  * @returns Success status
  */
 export async function logAuditEvent(request: CreateAuditLogRequest) {
+  const serializeError = (e: unknown): string =>
+    e instanceof Error ? e.message : (typeof e === 'object' && e !== null ? JSON.stringify(e) : String(e));
+
   try {
-    // Call Supabase function to log audit event
-    const { data, error } = await supabase.rpc('log_audit_event', {
+    // Try RPC first; fall back to direct insert if function doesn't exist
+    const { error: rpcError } = await supabase.rpc('log_audit_event', {
       p_user_id: request.user_id,
       p_company_id: request.company_id,
       p_action: request.action,
@@ -34,17 +37,34 @@ export async function logAuditEvent(request: CreateAuditLogRequest) {
       p_error_message: request.error_message,
     });
 
-    if (error) {
-      throw error;
+    if (!rpcError) return { success: true };
+
+    // RPC failed — fall back to direct insert
+    const { error: insertError } = await supabase.from('audit_logs').insert({
+      user_id: request.user_id,
+      company_id: request.company_id,
+      action: request.action,
+      resource_type: request.resource_type,
+      resource_id: request.resource_id || null,
+      resource_name: request.resource_name || null,
+      old_values: request.old_values || null,
+      new_values: request.new_values || null,
+      ip_address: request.ip_address || null,
+      user_agent: request.user_agent || null,
+      status: request.status || 'success',
+      error_message: request.error_message || null,
+    });
+
+    if (insertError) {
+      // Audit logging is non-critical — log a readable message and return gracefully
+      console.warn('Audit log skipped:', serializeError(insertError));
+      return { success: false, error: serializeError(insertError) };
     }
 
-    return { success: true, data };
-  } catch (error) {
-    console.error('Error logging audit event:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return { success: true };
+  } catch (e) {
+    console.warn('Audit log skipped:', serializeError(e));
+    return { success: false, error: serializeError(e) };
   }
 }
 
@@ -82,11 +102,9 @@ export async function logActivityEvent(
 
     return { success: true, data };
   } catch (error) {
-    console.error('Error logging activity event:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    const msg = error instanceof Error ? error.message : (typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error));
+    console.warn('Activity log skipped:', msg);
+    return { success: false, error: msg };
   }
 }
 

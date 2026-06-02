@@ -23,6 +23,7 @@ interface CreateEmployeeRequest {
   position?: string;
   department?: string;
   date_of_joining?: string;
+  grade_id?: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
         department: payload.department,
         date_of_joining: payload.date_of_joining || new Date().toISOString().split('T')[0],
         status: 'Active',
+        grade_id: payload.grade_id || null,
       })
       .select()
       .single();

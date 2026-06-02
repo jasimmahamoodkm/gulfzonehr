@@ -50,7 +50,10 @@
       "Bash(kill 3585 3176)",
       "Bash(curl -s http://localhost:3000/)",
       "Bash(node -e ' *)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(mkdir -p \"/Users/jasimmahmood/Documents/Jasim Mahmood/Projects/ClaudeWorks/GulfZoneHR/src/app/admin/grades/[id]\")",
+      "Bash(npx tsc *)",
+      "Bash(npx vercel *)"
     ]
   }
 }

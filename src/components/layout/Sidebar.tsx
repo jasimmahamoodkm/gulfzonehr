@@ -6,8 +6,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
-  Building2,
-  Calendar,
   DollarSign,
   BarChart3,
   Settings,
@@ -18,18 +16,15 @@ import {
   Lock,
   Shield,
   CheckCircle,
+  GraduationCap,
 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 
 const MENU_ITEMS = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/employee-dashboard', label: 'My Dashboard', icon: LayoutDashboard, requiredRole: 'Employee' },
   { href: '/manager-dashboard', label: 'Team Dashboard', icon: BarChart3, requiredRole: 'Department Manager' },
-  { href: '/employees', label: 'Employees', icon: Users },
-  { href: '/companies', label: 'Companies', icon: Building2 },
-  { href: '/attendance', label: 'Attendance', icon: Calendar },
   { href: '/leave', label: 'Leave Management', icon: Users },
   { href: '/leaves', label: 'Leaves', icon: Users },
   { href: '/payroll', label: 'Payroll', icon: DollarSign },
@@ -41,6 +36,7 @@ const ADMIN_MENU_ITEMS = [
   { href: '/admin/rbac', label: 'RBAC Management', icon: Lock, requiredRole: 'Company Admin' },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: Shield, requiredRole: 'Company Admin' },
   { href: '/admin/leave-approvals', label: 'Leave Approvals', icon: CheckCircle, requiredRole: 'HR Manager' },
+  { href: '/admin/grades', label: 'Grade Configuration', icon: GraduationCap, requiredRole: 'HR Manager', skipModuleCheck: true },
 ];
 
 const Sidebar: React.FC = () => {
@@ -125,18 +121,18 @@ const Sidebar: React.FC = () => {
   console.log('🔐 Checking for role_name:', user?.roles?.map(r => ({ id: r.id, role_name: r.role_name })));
 
   // Filter admin items based on user's actual permissions and allowed modules
-  const visibleAdminItems = ADMIN_MENU_ITEMS.filter(item => {
-    // First check if module is allowed
-    if (!allowedModulePaths.has(item.href)) {
+  const visibleAdminItems = ADMIN_MENU_ITEMS.filter((item: any) => {
+    // Skip module check for items not yet registered in the modules table
+    if (!item.skipModuleCheck && !allowedModulePaths.has(item.href)) {
       return false;
     }
 
-    // Then check role requirement
+    // Check role requirement
     if (item.requiredRole === 'Company Admin') {
-      return user?.roles?.some(r => r.role_name === 'Super Admin' || r.role_name === 'Company Admin');
+      return user?.roles?.some((r: any) => r.role_name === 'Super Admin' || r.role_name === 'Company Admin');
     }
     if (item.requiredRole === 'HR Manager') {
-      return user?.roles?.some(r =>
+      return user?.roles?.some((r: any) =>
         r.role_name === 'Super Admin' ||
         r.role_name === 'Company Admin' ||
         r.role_name === 'HR Manager'
