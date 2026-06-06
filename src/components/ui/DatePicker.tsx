@@ -27,7 +27,9 @@ const DatePicker: React.FC<DatePickerProps> = ({
   const [displayValue, setDisplayValue] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (value) {
@@ -54,9 +56,38 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
   const selectedDate = value ? parse(value, 'yyyy-MM-dd', new Date()) : new Date(selectedYear, selectedMonth, 1);
 
+  // Calculate dropdown position when opening
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const dropdownHeight = 450; // Approximate height of dropdown
+      const viewportHeight = window.innerHeight;
+
+      // Check if dropdown would go below viewport
+      const spaceBelow = viewportHeight - rect.bottom;
+      const positionBelow = spaceBelow > dropdownHeight;
+
+      // Position above if not enough space below
+      const top = positionBelow
+        ? rect.bottom + 8
+        : rect.top - dropdownHeight - 8;
+
+      setDropdownPos({
+        top: Math.max(8, top), // Ensure minimum top position
+        left: rect.left,
+      });
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      // Check if click is outside both the button and the dropdown
+      const isOutsideButton = containerRef.current && !containerRef.current.contains(target);
+      const isOutsideDropdown = dropdownRef.current && !dropdownRef.current.contains(target);
+
+      if (isOutsideButton && isOutsideDropdown) {
         setIsOpen(false);
       }
     };
@@ -85,7 +116,15 @@ const DatePicker: React.FC<DatePickerProps> = ({
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute top-full left-0 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 w-80">
+        <div
+          ref={dropdownRef}
+          className="fixed bg-white border border-gray-300 rounded-lg shadow-2xl p-4 w-80"
+          style={{
+            top: `${dropdownPos.top}px`,
+            left: `${dropdownPos.left}px`,
+            zIndex: 9999,
+          }}
+        >
           <style>{`
             .rdp {
               --rdp-cell-size: 36px;

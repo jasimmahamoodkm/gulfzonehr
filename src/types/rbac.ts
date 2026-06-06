@@ -7,7 +7,7 @@ export type SystemRole =
   | 'Super Admin'
   | 'Company Admin'
   | 'HR Manager'
-  | 'Department Manager'
+  | 'Manager'
   | 'Employee';
 
 export type Resource =

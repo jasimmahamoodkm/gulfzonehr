@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { AuditLog, AuditLogFilter } from '@/types/audit';
 import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
+import DatePicker from '@/components/ui/DatePicker';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -142,20 +143,20 @@ export default function AuditLogsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 From Date
               </label>
-              <Input
-                type="date"
+              <DatePicker
                 value={filters.start_date || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('start_date', e.target.value)}
+                onChange={(date) => handleFilterChange('start_date', date)}
+                placeholder="Select start date"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 To Date
               </label>
-              <Input
-                type="date"
+              <DatePicker
                 value={filters.end_date || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('end_date', e.target.value)}
+                onChange={(date) => handleFilterChange('end_date', date)}
+                placeholder="Select end date"
               />
             </div>
           </div>

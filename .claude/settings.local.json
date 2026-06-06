@@ -53,7 +53,32 @@
       "Bash(xargs cat)",
       "Bash(mkdir -p \"/Users/jasimmahmood/Documents/Jasim Mahmood/Projects/ClaudeWorks/GulfZoneHR/src/app/admin/grades/[id]\")",
       "Bash(npx tsc *)",
-      "Bash(npx vercel *)"
+      "Bash(npx vercel *)",
+      "Bash(curl -s https://zmucqoeihukhmotzxrgs.supabase.co/rest/v1/ -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptdWNxb2VpaHVraG1vdHp4cmdzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODE2OTIyNywiZXhwIjoyMDkzNzQ1MjI3fQ.m4Cyq8VYnTU32SCo7flZDsLmnh_DjAvij0rPRll6i70' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptdWNxb2VpaHVraG1vdHp4cmdzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODE2OTIyNywiZXhwIjoyMDkzNzQ1MjI3fQ.m4Cyq8VYnTU32SCo7flZDsLmnh_DjAvij0rPRll6i70')",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/ -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(echo \"=== COMPANIES ===\")",
+      "Bash(curl -s https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/companies?select=id,name,email -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(python3 -c \"import sys,json; [print\\(r\\) for r in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/user_roles?select=user_id,role_id,company_id -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(curl -s https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/employees?select=id,first_name,last_name,email,status,company_id -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Records: {len\\(d\\)}'\\)\")",
+      "Bash(curl -s https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/role_modules?select=role_id,module_id -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(curl -s 'https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/leave_types?select=name,company_id&limit=3' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(curl -s 'https://ebdoxleodzmvmfykakig.supabase.co/rest/v1/leave_types?select=name,days_per_year,active,company_id&order=name' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViZG94bGVvZHptdm1meWtha2lnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY1MjgzMiwiZXhwIjoyMDk2MjI4ODMyfQ.7wy2xiBiX_TXLUVEPbfOkXP_Gezs2-PxazlIKv-Sn1k')",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(grep -vE \"console\\\\.log\\\\\\([^\\(\\)]*\\\\\\)[,;]?\\\\s*$\")",
+      "Bash(grep -vE \"console\\\\.log\\\\\\(.*\\\\\\);.*$\")",
+      "Bash(grep -B1 \"^\\\\S*[0-9]*-\\\\s*}\\\\s*$\")",
+      "Bash(rm -f src/lib/logoutUtils.ts)",
+      "Bash(rm -f fix_audit_logs.sql)",
+      "Bash(rm -f scripts/fix-audit-logs.js)",
+      "Bash(rmdir scripts *)",
+      "Bash(rm -f PASSWORD_CHANGE_FIX.md PASSWORD_CHANGE_FIX_v2.md)",
+      "Bash(npx eslint *)",
+      "mcp__02014205-d1e3-4805-8237-552cce494442__get_advisors",
+      "Bash(python3 -c \"print\\(open\\('/tmp/split_policies.sql'\\).read\\(\\)\\)\")"
     ]
   }
 }

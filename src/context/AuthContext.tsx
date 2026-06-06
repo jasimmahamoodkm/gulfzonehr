@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { User, UserPermission } from '@/types/index';
 import { AuthContextType, LoginPayload, SignupPayload, AuthError } from '@/types/auth';
 import { PermissionCheckResult } from '@/types/rbac';
+import { apiUrl } from '@/lib/api';
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -25,7 +26,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .eq('user_id', userId);
 
       if (companiesError) {
-        console.warn('⚠️ Warning loading companies:', companiesError.message);
+        console.warn('Warning loading companies:', companiesError.message);
         return [];
       }
 
@@ -45,7 +46,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       return companies;
     } catch (err) {
-      console.warn('⚠️ Error loading user companies:', err);
+      console.warn('Error loading user companies:', err);
       return [];
     }
   };
@@ -67,7 +68,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { data: rolesData, error: rolesError } = await rolesQuery;
 
       if (rolesError) {
-        console.error('❌ Error fetching roles:', rolesError.message || rolesError);
+        console.error('Error fetching roles:', rolesError.message || rolesError);
         throw rolesError;
       }
 
@@ -88,7 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           .in('role_id', roleIds);
 
         if (permError) {
-          console.error('❌ Error fetching permissions:', permError.message || permError);
+          console.error('Error fetching permissions:', permError.message || permError);
           throw permError;
         }
         permissions = permissionsData || [];
@@ -100,7 +101,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { roles, permissions };
     } catch (err) {
       const errorMsg = (err as any)?.message || (err as any)?.error?.message || String(err) || 'Unknown error';
-      console.error('❌ Error loading roles and permissions:', errorMsg, err);
+      console.error('Error loading roles and permissions:', errorMsg, err);
       return { roles: [], permissions: [] };
     }
   };
@@ -113,19 +114,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user) {
-          // Fetch full user profile from database
-          const { data: userData, error: fetchError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+          // Fetch user profile and companies in parallel (independent queries)
+          const [{ data: userData, error: fetchError }] = await Promise.all([
+            supabase.from('users').select('*').eq('id', session.user.id).single(),
+            loadUserCompanies(session.user.id),
+          ]);
 
           if (fetchError) throw fetchError;
 
-          // Load user companies
-          await loadUserCompanies(session.user.id);
-
-          // Load roles and permissions
+          // Load roles and permissions (needs company_id from userData)
           const { roles, permissions } = await loadUserRolesAndPermissions(
             session.user.id,
             userData?.company_id
@@ -135,6 +132,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             ...userData as User,
             roles,
             permissions,
+            is_temporary_password: session.user.user_metadata?.is_temporary_password,
           });
         }
       } catch (err) {
@@ -148,19 +146,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // USER_UPDATED fires when password changes — skip full reload to avoid
+      // overwriting the is_temporary_password flag we just cleared in state.
+      if (event === 'USER_UPDATED') {
+        return;
+      }
+
       if (session?.user) {
         try {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+          const [{ data: userData }] = await Promise.all([
+            supabase.from('users').select('*').eq('id', session.user.id).single(),
+            loadUserCompanies(session.user.id),
+          ]);
 
           if (userData) {
-            // Load user companies
-            await loadUserCompanies(session.user.id);
-
             const { roles, permissions } = await loadUserRolesAndPermissions(
               session.user.id,
               userData?.company_id
@@ -170,6 +170,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               ...userData as User,
               roles,
               permissions,
+              is_temporary_password: session.user.user_metadata?.is_temporary_password,
             });
           }
           setError(null);
@@ -376,88 +377,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const completePasswordChange = async (newPassword: string) => {
     try {
       setError(null);
-      console.log('🔐 completePasswordChange called');
 
-      // Step 1: Update password in Supabase Auth
-      console.log('📍 Step 1: Updating password in Supabase Auth...');
+      // Step 1: Get current valid token BEFORE changing password
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentToken = sessionData?.session?.access_token;
+
+      if (!currentToken) {
+        throw new Error('Session expired. Please log in again.');
+      }
+
+      // Step 2: Clear the temporary password flag via API (non-blocking)
+      // Must be done BEFORE updateUser() because that invalidates the token
+      try {
+        const response = await fetch(apiUrl('/api/auth/clear-temporary-password'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`,
+          },
+        });
+        if (!response.ok) {
+          console.warn('clear-temporary-password API returned non-OK status, continuing anyway');
+        }
+      } catch (apiErr) {
+        // Non-critical — continue with password update even if this fails
+        console.warn('clear-temporary-password API failed (non-critical):', apiErr);
+      }
+
+      // Step 3: Update password in Supabase Auth
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
-      if (updateError) throw updateError;
-      console.log('✅ Password updated successfully in Supabase Auth');
-
-      // Step 2: Get session and extract bearer token
-      console.log('📍 Step 2: Clearing temporary password flag via API...');
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      console.log('📍 Session data:', {
-        hasSession: !!sessionData?.session,
-        hasAccessToken: !!token,
-        tokenLength: token?.length || 0,
-      });
-
-      if (!token) {
-        throw new Error('No access token available. Please log in again.');
+      if (updateError) {
+        throw new Error(updateError.message || 'Failed to update password');
       }
 
-      // Step 3: Call clear-temporary-password API with Bearer token
-      console.log('📍 Making API call to clear-temporary-password...');
-      const response = await fetch('/api/auth/clear-temporary-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      console.log('📍 API response status:', response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(
-          errorData.error || `API error: ${response.status}`
-        );
-      }
-
-      const responseData = await response.json();
-      console.log('✅ Temporary password flag cleared:', responseData);
-
-      // Step 4: Update local user state
-      console.log('📍 Step 3: Updating local user state...');
+      // Step 4: Update local state so UI unblocks immediately
+      // Do NOT call refreshSession() — it hangs after a password change
       if (user) {
         setUser({ ...user, is_temporary_password: false });
       }
-      console.log('✅ Local user state updated');
 
-      // Step 5: Refresh session to ensure metadata is up-to-date
-      console.log('📍 Step 4: Refreshing session...');
-      const { data: refreshData } = await supabase.auth.refreshSession();
-      console.log('✅ Session refreshed successfully');
-
-      if (refreshData.user?.user_metadata) {
-        console.log('📍 Refreshed user metadata:', refreshData.user.user_metadata);
-      }
-
-      // Step 6: Verify flag was actually cleared
-      console.log('📍 Step 5: Verifying flag was cleared...');
-      const { data: { user: verifyUser } } = await supabase.auth.getUser(token);
-
-      if (verifyUser) {
-        const isFlagCleared = !verifyUser.user_metadata?.is_temporary_password;
-        console.log('✅ Flag verification:', {
-          isFlagCleared,
-          currentMetadata: verifyUser.user_metadata,
-        });
-      }
-
-      console.log('✅ Password changed successfully!');
     } catch (err) {
-      const authError = err as AuthError;
-      const errorMessage = authError.message || (err as any)?.message || 'Password change failed';
-      console.error('❌ Password change error:', err);
-      setError(errorMessage);
+      const msg = err instanceof Error ? err.message : 'Password change failed';
+      setError(msg);
       throw err;
     }
   };

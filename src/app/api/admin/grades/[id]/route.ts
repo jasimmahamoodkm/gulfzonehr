@@ -1,3 +1,4 @@
+import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,22 +8,44 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-async function getCompanyId(request: NextRequest): Promise<{ companyId: string | null; error: NextResponse | null }> {
+async function getCompanyId(request: NextRequest): Promise<{ companyId: string | null; userId: string | null; error: NextResponse | null }> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { companyId: null, userId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
   const token = authHeader.substring(7);
   const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
   if (userError || !user) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { companyId: null, userId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
+  // Look up company_id from users table, fallback to user_companies (primary)
   const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
-  const companyId = userData?.company_id ?? null;
+  let companyId: string | null = userData?.company_id ?? null;
+
   if (!companyId) {
-    return { companyId: null, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
+    const { data: ucData } = await supabaseAdmin
+      .from('user_companies')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('is_primary', true)
+      .single();
+    companyId = ucData?.company_id ?? null;
   }
-  return { companyId, error: null };
+
+  if (!companyId) {
+    const { data: anyUc } = await supabaseAdmin
+      .from('user_companies')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .single();
+    companyId = anyUc?.company_id ?? null;
+  }
+
+  if (!companyId) {
+    return { companyId: null, userId: user.id, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
+  }
+  return { companyId, userId: user.id, error: null };
 }
 
 export async function GET(
@@ -62,7 +85,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
+    const { companyId, userId, error } = await getCompanyId(request);
     if (error) return error;
 
     const { id } = await params;
@@ -100,6 +123,10 @@ export async function PATCH(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+    try {
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: companyId!, action: 'update_grade', resource_type: 'employee_grades', resource_id: data.id, resource_name: data.name, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
@@ -111,7 +138,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
+    const { companyId, userId, error } = await getCompanyId(request);
     if (error) return error;
 
     const { id } = await params;
@@ -138,6 +165,10 @@ export async function DELETE(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+    try {
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: companyId!, action: 'delete_grade', resource_type: 'employee_grades', resource_id: id as any, resource_name: `Grade ${id}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });

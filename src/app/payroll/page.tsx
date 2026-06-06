@@ -37,13 +37,17 @@ const MonthSelect: React.FC<{ value: string; onChange: (v: string) => void; clas
   );
 };
 import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { apiUrl } from '@/lib/api';
 
 interface Employee {
   id: string;
   first_name: string;
   last_name: string;
-  position: string;
+  position?: string;
+  department?: string;
+  employment_type?: string;
   grade_id: string | null;
 }
 
@@ -78,6 +82,41 @@ interface LeaveBalanceLine {
 
 const PayrollPage: React.FC = () => {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
+
+  // Determine user role
+  const isSuperAdmin = user?.roles?.some(r => r.role_name === 'Super Admin') ?? false;
+  const isAdmin = user?.roles?.some(r =>
+    r.role_name === 'Super Admin' ||
+    r.role_name === 'Company Admin' ||
+    r.role_name === 'HR Manager'
+  ) || false;
+  const isEmployee = !isAdmin;
+  // Show self-benefits panel for everyone who has an employee record (all except Super Admin)
+  const showSelfBenefits = !isSuperAdmin;
+
+  // Get current employee ID for all non-Super-Admin users
+  // (Company Admin, HR Manager, Manager, Employee all have employee records)
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+  React.useEffect(() => {
+    const getEmployeeId = async () => {
+      if (!isSuperAdmin && user?.id) {
+        try {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (empData) {
+            setCurrentEmployeeId(empData.id);
+          }
+        } catch (err) {
+          console.error('Error fetching employee record:', err);
+        }
+      }
+    };
+    getEmployeeId();
+  }, [isSuperAdmin, user?.id]);
 
   // List state
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().substring(0, 7));
@@ -110,6 +149,81 @@ const PayrollPage: React.FC = () => {
   const [markingPaid, setMarkingPaid] = useState(false);
   const [payslipLeaveBalances, setPayslipLeaveBalances] = useState<LeaveBalanceLine[]>([]);
 
+  // Employee self-benefits state (shown in My Payroll view)
+  const [myBenefits, setMyBenefits] = useState<BenefitLine[]>([]);
+  const [myBasicSalary, setMyBasicSalary] = useState<number>(0);
+  const [myBenefitsLoading, setMyBenefitsLoading] = useState(false);
+
+  // Load self-benefits for all non-Super-Admin users who have an employee record
+  React.useEffect(() => {
+    if (!showSelfBenefits || !currentEmployeeId) return;
+    const loadMyBenefits = async () => {
+      setMyBenefitsLoading(true);
+      try {
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('grade_id')
+          .eq('id', currentEmployeeId)
+          .single();
+        if (!empData?.grade_id) return;
+
+        // Salary
+        const today = new Date().toISOString().split('T')[0];
+        const { data: salData } = await supabase
+          .from('grade_salary_config')
+          .select('salary')
+          .eq('grade_id', empData.grade_id)
+          .lte('effective_from', today)
+          .order('effective_from', { ascending: false })
+          .limit(1);
+        const salary = salData?.[0]?.salary ?? 0;
+        setMyBasicSalary(salary);
+
+        // Benefits
+        const { data: bData } = await supabase
+          .from('grade_benefits')
+          .select('id,benefit_type,benefit_value,value_type,currency,active')
+          .eq('grade_id', empData.grade_id)
+          .eq('active', true)
+          .order('benefit_type');
+
+        const month = selectedMonth;
+        const june = month.endsWith('-06');
+        const january = month.endsWith('-01');
+
+        const lines: BenefitLine[] = (bData || []).map((b: any) => {
+          const isAnnualTicket = b.benefit_type === 'Annual Flight Ticket';
+          const isAnnualBonus  = b.benefit_type === 'Annual Bonus';
+          const included = (!isAnnualTicket || june) && (!isAnnualBonus || january);
+          const raw = b.benefit_value ?? 0;
+          const computed = b.value_type === 'percentage'
+            ? Math.round((raw / 100) * salary * 100) / 100
+            : raw;
+          return {
+            id: b.id,
+            benefit_type: b.benefit_type,
+            benefit_value: raw,
+            value_type: b.value_type,
+            currency: b.currency || 'AED',
+            computed_amount: included ? computed : 0,
+            included,
+            reason_excluded: !included
+              ? isAnnualTicket ? 'Paid in June only'
+              : isAnnualBonus  ? 'Paid in January only'
+              : undefined
+              : undefined,
+          };
+        });
+        setMyBenefits(lines);
+      } catch (err) {
+        console.error('Error loading employee benefits:', err);
+      } finally {
+        setMyBenefitsLoading(false);
+      }
+    };
+    loadMyBenefits();
+  }, [showSelfBenefits, currentEmployeeId, selectedMonth]);
+
   // Batch payroll state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchMonth, setBatchMonth] = useState(new Date().toISOString().substring(0, 7));
@@ -131,35 +245,57 @@ const PayrollPage: React.FC = () => {
   // ── Data fetching ──────────────────────────────────────────────
 
   const fetchPayroll = useCallback(async () => {
-    if (!selectedCompany) { setPayrollData([]); return; }
     try {
       setLoading(true);
 
-      const { data: empData } = await supabase
-        .from('employees')
-        .select('id,first_name,last_name,position,grade_id')
-        .eq('company_id', selectedCompany.id)
-        .eq('status', 'Active');
-      setEmployees(empData || []);
+      // For employees: show only their own payroll
+      if (isEmployee && currentEmployeeId) {
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('id,first_name,last_name,position,department,employment_type,grade_id')
+          .eq('id', currentEmployeeId)
+          .single();
+        setEmployees(empData ? [empData] : []);
 
-      const empIds = (empData || []).map((e: any) => e.id);
-      if (empIds.length === 0) { setPayrollData([]); return; }
+        const { data: payData, error } = await supabase
+          .from('payroll')
+          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at')
+          .eq('employee_id', currentEmployeeId)
+          .eq('month', selectedMonth)
+          .order('created_at', { ascending: false });
 
-      const { data: payData, error } = await supabase
-        .from('payroll')
-        .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at')
-        .in('employee_id', empIds)
-        .eq('month', selectedMonth)
-        .order('created_at', { ascending: false });
+        if (error) throw error;
+        setPayrollData(payData || []);
+      } else if (selectedCompany) {
+        // For admin: show all employees' payroll
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('id,first_name,last_name,position,department,employment_type,grade_id')
+          .eq('company_id', selectedCompany.id)
+          .eq('status', 'Active');
+        setEmployees(empData || []);
 
-      if (error) throw error;
-      setPayrollData(payData || []);
+        const empIds = (empData || []).map((e: any) => e.id);
+        if (empIds.length === 0) { setPayrollData([]); return; }
+
+        const { data: payData, error } = await supabase
+          .from('payroll')
+          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at')
+          .in('employee_id', empIds)
+          .eq('month', selectedMonth)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setPayrollData(payData || []);
+      } else {
+        setPayrollData([]);
+      }
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to load payroll records' });
     } finally {
       setLoading(false);
     }
-  }, [selectedCompany, selectedMonth]);
+  }, [selectedCompany, selectedMonth, isEmployee, currentEmployeeId]);
 
   useEffect(() => { fetchPayroll(); }, [fetchPayroll]);
 
@@ -552,17 +688,15 @@ const PayrollPage: React.FC = () => {
         };
         if (selectedCompany?.id) payload.company_id = selectedCompany.id;
 
-        const { error } = await supabase.from('payroll').insert(payload);
-
-        if (error) {
-          if (error.message?.includes('company_id') || error.code === '42703') {
-            delete payload.company_id;
-            const { error: e2 } = await supabase.from('payroll').insert(payload);
-            if (e2) throw new Error(e2.message);
-          } else {
-            throw new Error(error.message);
-          }
-        }
+        const { data: { session: bSession } } = await supabase.auth.getSession();
+        const bToken = bSession?.access_token;
+        const bRes = await fetch(apiUrl('/api/payroll'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(bToken ? { Authorization: `Bearer ${bToken}` } : {}) },
+          body: JSON.stringify(payload),
+        });
+        const bJson = await bRes.json();
+        if (!bRes.ok) throw new Error(bJson.error || 'Failed to process payroll');
 
         results.push({ employee_id: emp.id, employee_name: name, status: 'processed', net_pay: calc.netPay });
       } catch (err) {
@@ -636,17 +770,16 @@ const PayrollPage: React.FC = () => {
 
       if (selectedCompany?.id) insertPayload.company_id = selectedCompany.id;
 
-      const { error } = await supabase.from('payroll').insert(insertPayload);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (error) {
-        if (error.message?.includes('company_id') || error.code === '42703') {
-          delete insertPayload.company_id;
-          const { error: retryError } = await supabase.from('payroll').insert(insertPayload);
-          if (retryError) throw new Error(retryError.message || JSON.stringify(retryError));
-        } else {
-          throw new Error(error.message || JSON.stringify(error));
-        }
-      }
+      const res = await fetch(apiUrl('/api/payroll'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(insertPayload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to process payroll');
 
       setMessage({ type: 'success', text: 'Payroll processed successfully' });
       closeModal();
@@ -677,7 +810,14 @@ const PayrollPage: React.FC = () => {
 
   // ── Delete payroll record ──────────────────────────────────────
   const deletePayroll = async (id: string) => {
-    const { error } = await supabase.from('payroll').delete().eq('id', id);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(apiUrl(`/api/payroll?id=${id}`), {
+      method: 'DELETE',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    const json = await res.json();
+    const error = res.ok ? null : { message: json.error || 'Delete failed' };
     if (!error) fetchPayroll();
   };
 
@@ -795,13 +935,15 @@ const PayrollPage: React.FC = () => {
       key: 'actions', label: '',
       render: (_: any, row: any) => (
         <div className="flex gap-2 justify-end items-center">
+          {/* View payslip — always available once payroll is generated */}
           <button
             onClick={() => viewPayslip(row)}
             className="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-600 hover:bg-blue-50 transition"
           >
-            Payslip
+            {isEmployee ? 'View Payslip' : 'Payslip'}
           </button>
-          {row.status !== 'Paid' && (
+          {/* Admin-only actions */}
+          {isAdmin && row.status !== 'Paid' && (
             <button
               onClick={async () => {
                 await supabase.from('payroll').update({ status: 'Paid' }).eq('id', row.id);
@@ -812,7 +954,7 @@ const PayrollPage: React.FC = () => {
               Mark Paid
             </button>
           )}
-          {row.status !== 'Paid' ? (
+          {isAdmin && (row.status !== 'Paid' ? (
             <button
               onClick={() => {
                 if (confirm('Delete this payroll record? The employee can then be re-processed for this month.')) {
@@ -826,11 +968,206 @@ const PayrollPage: React.FC = () => {
             </button>
           ) : (
             <span className="text-xs text-gray-400 px-1.5" title="Paid records cannot be deleted">🔒</span>
-          )}
+          ))}
         </div>
       ),
     },
   ];
+
+  const printPayslip = () => {
+    if (!payslipRecord) return;
+
+    const emp = employees.find(e => e.id === payslipRecord.employee_id);
+    const includedLines = payslipLines.filter((b: any) => b.included);
+    const monthLabel = new Date(payslipRecord.month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' });
+    const totalEarnings = payslipRecord.salary + payslipRecord.bonus;
+    const payDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const fmtNum = (n: number) =>
+      'AED ' + (n || 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const benefitRows = includedLines.map((b: any) => `
+      <tr>
+        <td style="padding:6px 12px;color:#374151;">${b.benefit_type}${b.value_type === 'percentage' ? ` (${b.benefit_value}%)` : ''}</td>
+        <td style="padding:6px 12px;text-align:right;color:#1f2937;">${fmtNum(b.computed_amount)}</td>
+      </tr>`).join('');
+
+    const deductionRows = payslipRecord.deductions > 0 ? `
+      ${payslipRecord.leave_deduction_amount > 0 ? `
+      <tr>
+        <td style="padding:6px 12px;color:#374151;">Excess Leave Deduction<br/><small style="color:#9ca3af;">${payslipRecord.leave_deduction_days} day${payslipRecord.leave_deduction_days !== 1 ? 's' : ''} excess</small></td>
+        <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(payslipRecord.leave_deduction_amount)}</td>
+      </tr>` : ''}
+      ${(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0)) > 0 ? `
+      <tr>
+        <td style="padding:6px 12px;color:#374151;">Other Deductions</td>
+        <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0))}</td>
+      </tr>` : ''}
+    ` : `<tr><td colspan="2" style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;">No deductions</td></tr>`;
+
+    const leaveRows = payslipLeaveBalances.map((lb: any) => `
+      <tr style="${lb.excess_days > 0 ? 'background:#fef2f2;' : ''}">
+        <td style="padding:6px 12px;color:#374151;font-weight:500;">${lb.leave_type_name}</td>
+        <td style="padding:6px 12px;text-align:center;color:#374151;">${lb.total_days} days</td>
+        <td style="padding:6px 12px;text-align:center;color:#374151;">${lb.used_days} days</td>
+        <td style="padding:6px 12px;text-align:center;font-weight:700;color:${lb.excess_days > 0 ? '#dc2626' : '#15803d'};">
+          ${lb.excess_days > 0 ? `${lb.excess_days} excess` : `${lb.remaining_days} days`}
+        </td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Payslip — ${monthLabel}</title>
+  <style>
+    @page { margin: 12mm; size: A4 portrait; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1f2937; background: #fff; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { vertical-align: top; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div style="background:#111827;color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;">
+  <div>
+    <div style="font-size:18px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${selectedCompany?.name || ''}</div>
+    ${selectedCompany?.address ? `<div style="color:#d1d5db;font-size:11px;margin-top:3px;">${selectedCompany.address}${selectedCompany.city ? ', ' + selectedCompany.city : ''}${selectedCompany.country ? ', ' + selectedCompany.country : ''}</div>` : ''}
+    ${selectedCompany?.phone ? `<div style="color:#d1d5db;font-size:11px;">Tel: ${selectedCompany.phone}</div>` : ''}
+    ${selectedCompany?.email ? `<div style="color:#d1d5db;font-size:11px;">${selectedCompany.email}</div>` : ''}
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:11px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;">PAYSLIP</div>
+    <div style="font-size:16px;font-weight:600;margin-top:4px;">${monthLabel}</div>
+    <div style="display:inline-block;margin-top:6px;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;background:${payslipRecord.status === 'Paid' ? '#16a34a' : '#ca8a04'};color:#fff;">
+      ${payslipRecord.status.toUpperCase()}
+    </div>
+  </div>
+</div>
+
+<!-- EMPLOYEE & PAYMENT DETAILS -->
+<table style="border-bottom:1px solid #e5e7eb;">
+  <tr>
+    <td style="width:50%;padding:16px 24px;border-right:1px solid #e5e7eb;">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Employee Details</div>
+      <table style="font-size:13px;">
+        <tr><td style="color:#6b7280;padding-right:12px;padding-bottom:4px;white-space:nowrap;">Name</td><td style="font-weight:700;">${emp ? emp.first_name + ' ' + emp.last_name : '—'}</td></tr>
+        ${emp?.position ? `<tr><td style="color:#6b7280;padding-right:12px;padding-bottom:4px;">Position</td><td>${emp.position}</td></tr>` : ''}
+        ${emp?.department ? `<tr><td style="color:#6b7280;padding-right:12px;padding-bottom:4px;">Department</td><td>${emp.department}</td></tr>` : ''}
+        ${emp?.employment_type ? `<tr><td style="color:#6b7280;padding-right:12px;">Employment</td><td>${emp.employment_type}</td></tr>` : ''}
+      </table>
+    </td>
+    <td style="width:50%;padding:16px 24px;">
+      <div style="font-size:10px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Payment Details</div>
+      <table style="font-size:13px;">
+        <tr><td style="color:#6b7280;padding-right:12px;padding-bottom:4px;white-space:nowrap;">Pay Period</td><td style="font-weight:700;">${monthLabel}</td></tr>
+        <tr><td style="color:#6b7280;padding-right:12px;padding-bottom:4px;">Pay Date</td><td>${payDate}</td></tr>
+        <tr><td style="color:#6b7280;padding-right:12px;">Currency</td><td>AED</td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- EARNINGS & DEDUCTIONS -->
+<table style="border-bottom:1px solid #e5e7eb;">
+  <tr>
+    <!-- Earnings -->
+    <td style="width:50%;vertical-align:top;border-right:1px solid #e5e7eb;">
+      <div style="background:#f9fafb;padding:8px 12px;border-bottom:1px solid #e5e7eb;">
+        <span style="font-size:10px;font-weight:700;color:#6b7280;letter-spacing:2px;text-transform:uppercase;">Earnings</span>
+      </div>
+      <table style="font-size:12px;">
+        <thead>
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <th style="text-align:left;padding:6px 12px;color:#9ca3af;font-weight:500;">Description</th>
+            <th style="text-align:right;padding:6px 12px;color:#9ca3af;font-weight:500;">Amount (AED)</th>
+          </tr>
+        </thead>
+        <tbody style="border-bottom:1px solid #e5e7eb;">
+          <tr><td style="padding:6px 12px;color:#374151;">Basic Salary</td><td style="padding:6px 12px;text-align:right;color:#1f2937;font-weight:600;">${fmtNum(payslipRecord.salary)}</td></tr>
+          ${benefitRows}
+        </tbody>
+        <tfoot>
+          <tr style="background:#111827;color:#fff;">
+            <td style="padding:9px 12px;font-weight:700;">Total Earnings</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:700;">${fmtNum(totalEarnings)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </td>
+    <!-- Deductions -->
+    <td style="width:50%;vertical-align:top;">
+      <div style="background:#f9fafb;padding:8px 12px;border-bottom:1px solid #e5e7eb;">
+        <span style="font-size:10px;font-weight:700;color:#6b7280;letter-spacing:2px;text-transform:uppercase;">Deductions</span>
+      </div>
+      <table style="font-size:12px;">
+        <thead>
+          <tr style="border-bottom:1px solid #f3f4f6;">
+            <th style="text-align:left;padding:6px 12px;color:#9ca3af;font-weight:500;">Description</th>
+            <th style="text-align:right;padding:6px 12px;color:#9ca3af;font-weight:500;">Amount (AED)</th>
+          </tr>
+        </thead>
+        <tbody style="border-bottom:1px solid #e5e7eb;">${deductionRows}</tbody>
+        <tfoot>
+          <tr style="background:#111827;color:#fff;">
+            <td style="padding:9px 12px;font-weight:700;">Total Deductions</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:700;">${fmtNum(payslipRecord.deductions)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- NET PAY BAND -->
+<div style="background:#111827;color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;">
+  <div>
+    <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Net Pay for ${monthLabel}</div>
+    <div style="font-size:28px;font-weight:800;margin-top:2px;">${fmtNum(payslipRecord.net_pay)}</div>
+  </div>
+  <div style="text-align:right;font-size:12px;">
+    <div style="color:#9ca3af;">Gross Earnings</div>
+    <div style="font-weight:600;">${fmtNum(totalEarnings)}</div>
+    <div style="color:#9ca3af;margin-top:6px;">Total Deductions</div>
+    <div style="font-weight:600;color:#fca5a5;">- ${fmtNum(payslipRecord.deductions)}</div>
+  </div>
+</div>
+
+${payslipLeaveBalances.length > 0 ? `
+<!-- LEAVE BALANCE -->
+<div style="background:#f9fafb;padding:8px 12px 8px 24px;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;">
+  <span style="font-size:10px;font-weight:700;color:#6b7280;letter-spacing:2px;text-transform:uppercase;">Leave Balance — Year ${payslipRecord.month?.split('-')[0] || ''}</span>
+</div>
+<table style="font-size:12px;">
+  <thead>
+    <tr style="background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+      <th style="text-align:left;padding:7px 24px;color:#6b7280;font-weight:600;">Leave Type</th>
+      <th style="text-align:center;padding:7px 12px;color:#6b7280;font-weight:600;">Annual Quota</th>
+      <th style="text-align:center;padding:7px 12px;color:#6b7280;font-weight:600;">Days Taken</th>
+      <th style="text-align:center;padding:7px 12px;color:#6b7280;font-weight:600;">Balance</th>
+    </tr>
+  </thead>
+  <tbody>${leaveRows}</tbody>
+</table>` : ''}
+
+<!-- FOOTER -->
+<div style="border-top:1px solid #e5e7eb;padding:12px 24px;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;">
+  <span>This is a computer-generated payslip and does not require a signature.</span>
+  <span>Generated on ${payDate}</span>
+</div>
+
+<script>window.onload = function(){ window.print(); window.onafterprint = function(){ window.close(); }; };<\/script>
+</body>
+</html>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert('Please allow popups to print the payslip.'); return; }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   return (
     <Layout>
@@ -838,19 +1175,25 @@ const PayrollPage: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Payroll Management</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEmployee ? 'My Payroll' : 'Payroll Management'}
+            </h1>
             <p className="text-gray-600 mt-1">
-              {selectedCompany ? `Manage payroll for ${selectedCompany.name}` : 'Select a company to manage payroll'}
+              {isEmployee
+                ? 'View your payroll records'
+                : selectedCompany ? `Manage payroll for ${selectedCompany.name}` : 'Select a company to manage payroll'}
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => setShowBatchModal(true)} disabled={!selectedCompany} className="gap-2 disabled:opacity-50">
-              <Users size={20} /> Process All Employees
-            </Button>
-            <Button variant="primary" onClick={() => setShowModal(true)} disabled={!selectedCompany} className="gap-2 disabled:opacity-50">
-              <Plus size={20} /> Process Single
-            </Button>
-          </div>
+          {isAdmin && (
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => setShowBatchModal(true)} disabled={!selectedCompany} className="gap-2 disabled:opacity-50">
+                <Users size={20} /> Process All Employees
+              </Button>
+              <Button variant="primary" onClick={() => setShowModal(true)} disabled={!selectedCompany} className="gap-2 disabled:opacity-50">
+                <Plus size={20} /> Process Single
+              </Button>
+            </div>
+          )}
         </div>
 
         {message && (
@@ -859,13 +1202,13 @@ const PayrollPage: React.FC = () => {
           </div>
         )}
 
-        {!selectedCompany && (
+        {!selectedCompany && !isEmployee && (
           <Card className="bg-blue-50 border border-blue-200">
             <p className="text-blue-700 text-center py-4">Please select a company from the header to manage payroll</p>
           </Card>
         )}
 
-        {selectedCompany && (
+        {(selectedCompany || isEmployee) && (
           <>
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -910,6 +1253,47 @@ const PayrollPage: React.FC = () => {
                 </div>
 
                 {/* Table */}
+                {/* ── Employee Benefits Panel ─────────────── */}
+                {showSelfBenefits && (
+                  <Card className="p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">My Benefits Package</h2>
+                    {myBenefitsLoading ? (
+                      <div className="flex justify-center py-4">
+                        <div className="w-6 h-6 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                      </div>
+                    ) : myBenefits.length === 0 ? (
+                      <p className="text-gray-500 text-sm">No benefits configured for your grade yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between py-2 border-b border-gray-100">
+                          <span className="text-sm text-gray-600">Basic Salary</span>
+                          <span className="text-sm font-semibold text-gray-900">{fmt(myBasicSalary)}</span>
+                        </div>
+                        {myBenefits.map(b => (
+                          <div key={b.id} className="flex justify-between py-1.5">
+                            <span className={`text-sm ${b.included ? 'text-gray-700' : 'text-gray-400'}`}>
+                              {b.benefit_type}
+                              {!b.included && b.reason_excluded && (
+                                <span className="ml-2 text-xs text-gray-400">({b.reason_excluded})</span>
+                              )}
+                            </span>
+                            <span className={`text-sm font-medium ${b.included ? 'text-blue-700' : 'text-gray-400'}`}>
+                              {b.included ? fmt(b.computed_amount) : '—'}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between py-2 border-t border-gray-200 mt-2">
+                          <span className="text-sm font-semibold text-gray-900">Total Package (this month)</span>
+                          <span className="text-sm font-bold text-green-700">
+                            {fmt(myBasicSalary + myBenefits.filter(b => b.included).reduce((s, b) => s + b.computed_amount, 0))}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                )}
+
+                {/* ── Payroll Records + Print ──────────────── */}
                 <Card header={<h2 className="text-lg font-semibold">Payroll Details — {selectedMonth}</h2>} noPadding>
                   {payrollData.length === 0 ? (
                     <div className="p-8 text-center text-gray-500">No payroll records for {selectedMonth}</div>
@@ -1160,7 +1544,8 @@ const PayrollPage: React.FC = () => {
         footer={
           <div className="flex gap-3 w-full justify-between">
             <div className="flex gap-2">
-              {payslipRecord?.status !== 'Paid' && (
+              {/* Mark as Paid — admin only */}
+              {isAdmin && payslipRecord?.status !== 'Paid' && (
                 <Button variant="primary" onClick={() => markAsPaid(payslipRecord?.id)} disabled={markingPaid}>
                   {markingPaid ? 'Marking…' : '✓ Mark as Paid'}
                 </Button>
@@ -1172,7 +1557,8 @@ const PayrollPage: React.FC = () => {
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => window.print()} className="gap-2">
+              {/* Print / Save PDF — available to all roles */}
+              <Button variant="secondary" onClick={printPayslip} className="gap-2">
                 <Download size={16} /> Print / Save PDF
               </Button>
               <Button variant="secondary" onClick={() => setShowPayslip(false)}>Close</Button>

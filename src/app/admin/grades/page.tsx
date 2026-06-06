@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { EmployeeGrade } from '@/types/index';
+import { apiUrl } from '@/lib/api';
 import {
   GraduationCap,
   Plus,
@@ -50,7 +51,7 @@ export default function GradesPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const res = await fetch('/api/admin/grades', {
+      const res = await fetch(apiUrl('/api/admin/grades'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -101,7 +102,7 @@ export default function GradesPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const url = editingGrade ? `/api/admin/grades/${editingGrade.id}` : '/api/admin/grades';
+      const url = editingGrade ? apiUrl(`/api/admin/grades/${editingGrade.id}`) : apiUrl('/api/admin/grades');
       const method = editingGrade ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -132,7 +133,7 @@ export default function GradesPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const res = await fetch(`/api/admin/grades/${deleteConfirm.id}`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${deleteConfirm.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

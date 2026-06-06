@@ -44,7 +44,6 @@ function LoginPageInner() {
 
       // Check if user has temporary password
       if (user?.is_temporary_password) {
-        console.log('🔑 User has temporary password, redirecting to change password page');
         router.push('/change-password-required');
         return;
       }
@@ -69,12 +68,10 @@ function LoginPageInner() {
       const fullCompany = companies.find(c => c.id === companyId);
       if (fullCompany) {
         setSelectedCompany(fullCompany);
-        console.log('✅ Company selected:', companyId, fullCompany.name);
       }
 
       // Check if user has temporary password
       if (user?.is_temporary_password) {
-        console.log('🔑 User has temporary password, redirecting to change password page');
         router.push('/change-password-required');
         return;
       }
@@ -87,7 +84,7 @@ function LoginPageInner() {
         router.push('/dashboard');
       }
     } catch (err) {
-      console.error('❌ Error selecting company:', err);
+      console.error('Error selecting company:', err);
       setErrorMessage('Failed to select company. Please try again.');
     }
   };

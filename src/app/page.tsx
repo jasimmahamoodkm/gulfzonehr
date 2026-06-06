@@ -16,7 +16,6 @@ const Home: React.FC = () => {
     if (!loading && user) {
       const isEmployee = user.roles?.some(role => role.role_name === 'Employee');
       if (isEmployee) {
-        console.log('👤 Employee redirected to employee dashboard');
         router.push('/employee-dashboard');
       }
     }

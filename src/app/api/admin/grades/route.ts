@@ -17,8 +17,30 @@ async function getCompanyId(request: NextRequest): Promise<{ companyId: string |
   if (userError || !user) {
     return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
+  // Look up company_id from users table, fallback to user_companies (primary)
   const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
-  const companyId = userData?.company_id ?? null;
+  let companyId: string | null = userData?.company_id ?? null;
+
+  if (!companyId) {
+    const { data: ucData } = await supabaseAdmin
+      .from('user_companies')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('is_primary', true)
+      .single();
+    companyId = ucData?.company_id ?? null;
+  }
+
+  if (!companyId) {
+    const { data: anyUc } = await supabaseAdmin
+      .from('user_companies')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .single();
+    companyId = anyUc?.company_id ?? null;
+  }
+
   if (!companyId) {
     return { companyId: null, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
   }
@@ -117,6 +139,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+    // Get user from token for audit
+    const authHeader2 = request.headers.get('Authorization');
+    const token2 = authHeader2?.substring(7);
+    const { data: { user: usr } } = await supabaseAdmin.auth.getUser(token2!);
+    try {
+      const { logAuditEvent, getIpAddress, getUserAgent } = await import('@/lib/audit');
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'create_grade', resource_type: 'employee_grades', resource_id: data.id, resource_name: data.name, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });

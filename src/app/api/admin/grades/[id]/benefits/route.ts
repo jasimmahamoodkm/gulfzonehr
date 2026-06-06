@@ -1,3 +1,4 @@
+import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -17,8 +18,30 @@ async function getCompanyId(request: NextRequest): Promise<{ companyId: string |
   if (userError || !user) {
     return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
+  // Look up company_id from users table, fallback to user_companies (primary)
   const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
-  const companyId = userData?.company_id ?? null;
+  let companyId: string | null = userData?.company_id ?? null;
+
+  if (!companyId) {
+    const { data: ucData } = await supabaseAdmin
+      .from('user_companies')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('is_primary', true)
+      .single();
+    companyId = ucData?.company_id ?? null;
+  }
+
+  if (!companyId) {
+    const { data: anyUc } = await supabaseAdmin
+      .from('user_companies')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .single();
+    companyId = anyUc?.company_id ?? null;
+  }
+
   if (!companyId) {
     return { companyId: null, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
   }
@@ -94,6 +117,7 @@ export async function POST(
       return NextResponse.json({ error: 'Missing required field: benefit_type' }, { status: 400 });
     }
 
+
     const { data, error: dbError } = await supabaseAdmin
       .from('grade_benefits')
       .insert({
@@ -110,9 +134,24 @@ export async function POST(
       .single();
 
     if (dbError) {
-      return NextResponse.json({ error: dbError.message }, { status: 500 });
+      console.error('[Benefits POST] Database error:', {
+        message: dbError.message,
+        code: (dbError as any).code,
+        details: (dbError as any).details,
+        hint: (dbError as any).hint,
+      });
+      return NextResponse.json({
+        error: dbError.message,
+        details: (dbError as any).details,
+        code: (dbError as any).code
+      }, { status: 500 });
     }
 
+        try {
+      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'create_benefit', resource_type: 'grade_benefits', resource_id: undefined, resource_name: `Benefit for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
@@ -161,6 +200,11 @@ export async function PATCH(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+        try {
+      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'update_benefit', resource_type: 'grade_benefits', resource_id: undefined, resource_name: `Benefit for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
@@ -199,6 +243,11 @@ export async function DELETE(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+        try {
+      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'delete_benefit', resource_type: 'grade_benefits', resource_id: undefined, resource_name: `Benefit for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });

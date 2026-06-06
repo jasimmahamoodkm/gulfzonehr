@@ -10,7 +10,6 @@ import { Users, Calendar, AlertCircle, TrendingUp, Clock, CheckCircle } from 'lu
 export default function ManagerDashboardPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [teamStats, setTeamStats] = useState({
     totalMembers: 0,
     presentToday: 0,
@@ -30,33 +29,35 @@ export default function ManagerDashboardPage() {
   const loadManagerData = async () => {
     try {
       setLoading(true);
-      console.log('📊 Loading manager dashboard data for user:', user?.id);
 
-      // Get all team members for this manager
-      const { data: approversData } = await supabase
-        .from('leave_approvers')
-        .select('employee_id')
-        .eq('approver_id', user?.id)
-        .eq('active', true);
+      // Step 1: find this manager's own employee record
+      const { data: myEmpData } = await supabase
+        .from('employees')
+        .select('id, company_id')
+        .eq('user_id', user?.id)
+        .maybeSingle();
 
-      const teamMemberIds = approversData?.map(a => a.employee_id) || [];
-      console.log('👥 Team members:', teamMemberIds);
+      const myEmployeeId = myEmpData?.id;
 
-      // Get employee details for team members
-      if (teamMemberIds.length > 0) {
-        const { data: empData, error: empError } = await supabase
-          .from('employees')
-          .select('*')
-          .in('id', teamMemberIds)
-          .order('first_name');
-
-        if (!empError) {
-          console.log('✅ Team members loaded:', empData);
-          setTeamMembers(empData || []);
-        }
+      if (!myEmployeeId) {
+        setLoading(false);
+        return;
       }
 
-      // Get today's attendance for team
+      // Step 2: fetch own record + directly assigned team members
+      const { data: allTeamData } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('company_id', myEmpData.company_id)
+        .or(`id.eq.${myEmployeeId},manager_id.eq.${myEmployeeId}`)
+        .order('first_name');
+
+      const allTeam = allTeamData || [];
+      const assignedOnly = allTeam.filter((e: any) => e.id !== myEmployeeId);
+      const teamMemberIds = assignedOnly.map(e => e.id);
+
+
+      // Get today's attendance for assigned team
       const today = new Date().toISOString().split('T')[0];
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('attendance')
@@ -65,7 +66,6 @@ export default function ManagerDashboardPage() {
         .eq('date', today);
 
       if (!attendanceError) {
-        console.log('✅ Today attendance loaded:', attendanceData);
         setTeamAttendanceToday(attendanceData || []);
 
         // Calculate stats
@@ -99,7 +99,6 @@ export default function ManagerDashboardPage() {
         .order('created_at', { ascending: false });
 
       if (!leavesError) {
-        console.log('✅ Pending leaves loaded:', pendingLeaves);
         setPendingLeaveRequests(pendingLeaves || []);
       }
 
@@ -130,7 +129,7 @@ export default function ManagerDashboardPage() {
         });
 
         const performance = Array.from(performanceMap.entries()).map(([empId, stats]) => {
-          const employee = teamMembers.find(m => m.id === empId);
+          const employee = allTeam.find((m: any) => m.id === empId);
           return {
             id: empId,
             name: employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown',
@@ -140,11 +139,10 @@ export default function ManagerDashboardPage() {
           };
         });
 
-        console.log('✅ Team performance loaded:', performance);
         setTeamPerformance(performance.sort((a, b) => b.attendanceRate - a.attendanceRate));
       }
     } catch (err) {
-      console.error('❌ Error loading manager dashboard:', err);
+      console.error('Error loading manager dashboard:', err);
     } finally {
       setLoading(false);
     }
@@ -158,10 +156,9 @@ export default function ManagerDashboardPage() {
         .eq('id', leaveId);
 
       if (error) throw error;
-      console.log('✅ Leave approved');
       loadManagerData();
     } catch (err) {
-      console.error('❌ Error approving leave:', err);
+      console.error('Error approving leave:', err);
     }
   };
 
@@ -173,10 +170,9 @@ export default function ManagerDashboardPage() {
         .eq('id', leaveId);
 
       if (error) throw error;
-      console.log('✅ Leave rejected');
       loadManagerData();
     } catch (err) {
-      console.error('❌ Error rejecting leave:', err);
+      console.error('Error rejecting leave:', err);
     }
   };
 

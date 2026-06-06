@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import {
@@ -17,26 +17,50 @@ import {
   Shield,
   CheckCircle,
   GraduationCap,
+  Building2,
+  Clock,
+  Calendar,
 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
 
-const MENU_ITEMS = [
-  { href: '/employee-dashboard', label: 'My Dashboard', icon: LayoutDashboard, requiredRole: 'Employee' },
-  { href: '/manager-dashboard', label: 'Team Dashboard', icon: BarChart3, requiredRole: 'Department Manager' },
-  { href: '/leave', label: 'Leave Management', icon: Users },
-  { href: '/leaves', label: 'Leaves', icon: Users },
+// Admin/HR menu items - shown to Super Admin, Company Admin, HR Manager
+const ADMIN_MAIN_ITEMS = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/employees', label: 'Employees', icon: Users },
+  { href: '/companies', label: 'Companies', icon: Building2 },
+  { href: '/attendance', label: 'Attendance', icon: Clock },
+  { href: '/leave', label: 'Leaves', icon: Calendar },
   { href: '/payroll', label: 'Payroll', icon: DollarSign },
   { href: '/documents', label: 'Documents', icon: FileText },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
 ];
 
+// Employee menu items - shown to regular employees
+const EMPLOYEE_MENU_ITEMS = [
+  { href: '/employee-dashboard', label: 'My Dashboard', icon: LayoutDashboard },
+  { href: '/attendance', label: 'My Attendance', icon: Clock },
+  { href: '/leave', label: 'My Leave', icon: Calendar },
+  { href: '/payroll', label: 'My Payroll', icon: DollarSign },
+  { href: '/documents', label: 'My Documents', icon: FileText },
+];
+
+// Manager menu items - shown to Managers
+const MANAGER_MENU_ITEMS = [
+  { href: '/manager-dashboard', label: 'Team Dashboard', icon: BarChart3 },
+  { href: '/employees', label: 'Employees', icon: Users },
+  { href: '/attendance', label: 'Attendance', icon: Clock },
+  { href: '/leave', label: 'Leave Management', icon: Calendar },
+  { href: '/payroll', label: 'My Payroll', icon: DollarSign },
+  { href: '/documents', label: 'Documents', icon: FileText },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
+];
+
 const ADMIN_MENU_ITEMS = [
-  { href: '/admin/rbac', label: 'RBAC Management', icon: Lock, requiredRole: 'Company Admin' },
-  { href: '/admin/audit-logs', label: 'Audit Logs', icon: Shield, requiredRole: 'Company Admin' },
-  { href: '/admin/leave-approvals', label: 'Leave Approvals', icon: CheckCircle, requiredRole: 'HR Manager' },
-  { href: '/admin/grades', label: 'Grade Configuration', icon: GraduationCap, requiredRole: 'HR Manager', skipModuleCheck: true },
+  { href: '/admin/rbac', label: 'RBAC Management', icon: Lock, requiredRole: 'Company Admin', requiresCompany: false },
+  { href: '/admin/audit-logs', label: 'Audit Logs', icon: Shield, requiredRole: 'Company Admin', requiresCompany: false },
+  { href: '/admin/leave-approvals', label: 'Leave Approvals', icon: CheckCircle, requiredRole: 'HR Manager', requiresCompany: true },
+  { href: '/admin/grades', label: 'Grade Configuration', icon: GraduationCap, requiredRole: 'HR Manager', requiresCompany: true },
 ];
 
 const Sidebar: React.FC = () => {
@@ -45,101 +69,77 @@ const Sidebar: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { selectedCompany } = useCompany();
   const { user } = useAuth();
-  const [allowedModulePaths, setAllowedModulePaths] = useState<Set<string>>(new Set());
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
 
-  // Load allowed modules for user
-  useEffect(() => {
-    const loadAllowedModules = async () => {
-      if (!user?.roles || user.roles.length === 0) {
-        console.log('🔐 No roles found, allowing basic dashboard');
-        setAllowedModulePaths(new Set(['/dashboard']));
-        return;
-      }
-
-      try {
-        const roleIds = user.roles.map(r => r.role_id);
-        console.log('📋 Loading allowed modules for roleIds:', roleIds);
-
-        // Fetch modules to get paths
-        const { data: modulesData, error: modulesError } = await supabase
-          .from('modules')
-          .select('id, path');
-
-        // Get module IDs from role_modules for this user's roles
-        const { data: rmData, error: rmError } = await supabase
-          .from('role_modules')
-          .select('module_id')
-          .in('role_id', roleIds);
-
-        if (!modulesError && !rmError && modulesData && rmData) {
-          // Create a set of allowed module IDs
-          const allowedModuleIds = new Set<string>();
-          rmData.forEach(rm => allowedModuleIds.add(rm.module_id));
-
-          console.log('📦 Allowed module IDs:', Array.from(allowedModuleIds));
-
-          // Map module IDs to paths
-          const allowedPaths = new Set<string>();
-          modulesData.forEach(module => {
-            if (allowedModuleIds.has(module.id)) {
-              allowedPaths.add(module.path);
-            }
-          });
-
-          console.log('✅ Allowed module paths:', Array.from(allowedPaths));
-          setAllowedModulePaths(allowedPaths);
-        } else {
-          console.log('⚠️ Error loading modules:', { modulesError, rmError });
-          console.log('⚠️ Allowing only dashboard');
-          setAllowedModulePaths(new Set(['/dashboard']));
-        }
-      } catch (err) {
-        console.error('❌ Error loading allowed modules:', err);
-        setAllowedModulePaths(new Set(['/dashboard']));
-      }
-    };
-
-    loadAllowedModules();
-  }, [user]);
-
   const handleLogout = () => {
-    console.log('🚪 Logout button clicked from sidebar, navigating to /logout page');
     router.push('/logout');
   };
 
-  // Check if user is admin
-  console.log('🔐 Sidebar checking user:', user);
-  console.log('🔐 User roles from context:', user?.roles);
-  const isAdmin = user?.roles?.some(role =>
-    role.role_name === 'Super Admin' ||
-    role.role_name === 'Company Admin' ||
-    role.role_name === 'HR Manager'
-  );
-  console.log('🔐 isAdmin result:', isAdmin);
-  console.log('🔐 Checking for role_name:', user?.roles?.map(r => ({ id: r.id, role_name: r.role_name })));
+  // Determine user role type
+  const isSuperAdmin = user?.roles?.some(r => r.role_name === 'Super Admin') ?? false;
+  const isCompanyAdmin = user?.roles?.some(r => r.role_name === 'Company Admin') ?? false;
+  const isHRManager = user?.roles?.some(r => r.role_name === 'HR Manager') ?? false;
+  const isDeptManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
+  const isAdmin = isSuperAdmin || isCompanyAdmin || isHRManager;
 
-  // Filter admin items based on user's actual permissions and allowed modules
-  const visibleAdminItems = ADMIN_MENU_ITEMS.filter((item: any) => {
-    // Skip module check for items not yet registered in the modules table
-    if (!item.skipModuleCheck && !allowedModulePaths.has(item.href)) {
+  // Companies module: Super Admin and Company Admin only (not HR Manager)
+  const canSeeCompanies = isSuperAdmin || isCompanyAdmin;
+
+  // Choose which menu items to show based on role, filtering restricted items
+  const baseAdminItems = canSeeCompanies
+    ? ADMIN_MAIN_ITEMS
+    : ADMIN_MAIN_ITEMS.filter(item => item.href !== '/companies');
+
+  const mainMenuItems = isAdmin
+    ? baseAdminItems
+    : isDeptManager
+    ? MANAGER_MENU_ITEMS
+    : EMPLOYEE_MENU_ITEMS;
+
+  // Filter admin section items based on role and company requirements
+  const visibleAdminItems = ADMIN_MENU_ITEMS.filter((item) => {
+    // Check if user has required role
+    let hasRequiredRole = false;
+    if (item.requiredRole === 'Company Admin') {
+      hasRequiredRole = isSuperAdmin || isCompanyAdmin;
+    } else if (item.requiredRole === 'HR Manager') {
+      hasRequiredRole = isSuperAdmin || isCompanyAdmin || isHRManager;
+    } else {
+      hasRequiredRole = isAdmin;
+    }
+
+    // Check if company is required and selected
+    const requiresCompany = item.requiresCompany ?? false;
+    if (requiresCompany && !selectedCompany) {
       return false;
     }
 
-    // Check role requirement
-    if (item.requiredRole === 'Company Admin') {
-      return user?.roles?.some((r: any) => r.role_name === 'Super Admin' || r.role_name === 'Company Admin');
+    if (!hasRequiredRole) {
     }
-    if (item.requiredRole === 'HR Manager') {
-      return user?.roles?.some((r: any) =>
-        r.role_name === 'Super Admin' ||
-        r.role_name === 'Company Admin' ||
-        r.role_name === 'HR Manager'
-      );
-    }
-    return true;
+
+    return hasRequiredRole;
   });
+
+  const renderNavItem = (item: { href: string; label: string; icon: any }, size: number = 20, extraClass: string = '') => {
+    const Icon = item.icon;
+    const active = isActive(item.href);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setSidebarOpen(false)}
+        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+          active
+            ? 'bg-blue-100 text-blue-600 font-medium'
+            : `text-gray-700 hover:bg-gray-100 ${extraClass}`
+        }`}
+      >
+        <Icon size={size} />
+        <span>{item.label}</span>
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -165,89 +165,50 @@ const Sidebar: React.FC = () => {
           </div>
         )}
 
-        <nav className="p-4 space-y-2">
-          {MENU_ITEMS.map((item) => {
-            // Check if module is allowed for user
-            const isModuleAllowed = allowedModulePaths.has(item.href);
-
-            if (!isModuleAllowed) {
-              console.log(`🚫 Module not allowed: ${item.href}`);
-              return null;
-            }
-
-            // Filter menu items based on required role
-            const hasRequiredRole = !('requiredRole' in item) ||
-              user?.roles?.some(role =>
-                role.role_name === (item as any).requiredRole ||
-                role.role_name === 'Super Admin' ||
-                role.role_name === 'Company Admin'
-              );
-
-            if (!hasRequiredRole) return null;
-
-            const Icon = item.icon;
-            const active = isActive(item.href);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                  active
-                    ? 'bg-blue-100 text-blue-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        {/* Main Navigation */}
+        <nav className="p-4 space-y-1">
+          {mainMenuItems.map(item => renderNavItem(item))}
         </nav>
 
         {/* Admin Section */}
         {isAdmin && visibleAdminItems.length > 0 && (
-          <>
-            <div className="px-4 py-3 mx-4 my-4 border-t border-b border-gray-200">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Administration</p>
-              <div className="space-y-2">
-                {visibleAdminItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = isActive(item.href);
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors ${
-                        active
-                          ? 'bg-purple-100 text-purple-600 font-medium'
-                          : 'text-gray-600 hover:bg-purple-50'
-                      }`}
-                    >
-                      <Icon size={18} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
+          <div className="px-4 mx-4 my-2 border-t border-gray-200 pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Administration</p>
+            <div className="space-y-1">
+              {visibleAdminItems.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors ${
+                      active
+                        ? 'bg-purple-100 text-purple-600 font-medium'
+                        : 'text-gray-600 hover:bg-purple-50'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
             </div>
-          </>
+          </div>
         )}
 
         {/* Bottom Section */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50 space-y-2">
-          <Link href="/settings" className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors text-left">
+          <Link
+            href="/settings"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors text-left"
+          >
             <Settings size={20} />
             <span>Profile Settings</span>
           </Link>
           <button
-            onClick={() => {
-              handleLogout();
-              setSidebarOpen(false);
-            }}
+            onClick={() => { handleLogout(); setSidebarOpen(false); }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors text-left"
           >
             <LogOut size={20} />

@@ -1,3 +1,4 @@
+import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -81,7 +82,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { salary, currency = 'AED', effective_from, effective_to, notes } = body;
+    const { salary, salary_component = 'Basic Salary', currency = 'AED', effective_from, effective_to, notes } = body;
 
     if (salary === undefined || !effective_from) {
       return NextResponse.json({ error: 'Missing required fields: salary, effective_from' }, { status: 400 });
@@ -92,6 +93,7 @@ export async function POST(
       .insert({
         grade_id: gradeId,
         company_id: companyId,
+        salary_component: salary_component || 'Basic Salary',
         salary: Number(salary),
         currency,
         effective_from,
@@ -105,6 +107,11 @@ export async function POST(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+    try {
+      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'create_salary_config', resource_type: 'grade_salary_config', resource_id: data.id, resource_name: `Salary config for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
@@ -126,13 +133,14 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { config_id, salary, currency, effective_from, effective_to, notes } = body;
+    const { config_id, salary, salary_component, currency, effective_from, effective_to, notes } = body;
 
     if (!config_id) {
       return NextResponse.json({ error: 'Missing required field: config_id' }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = {};
+    if (salary_component !== undefined) updates.salary_component = salary_component;
     if (salary !== undefined) updates.salary = Number(salary);
     if (currency !== undefined) updates.currency = currency;
     if (effective_from !== undefined) updates.effective_from = effective_from;
@@ -152,6 +160,11 @@ export async function PATCH(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
+    try {
+      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+      const hdrs = Object.fromEntries(request.headers.entries());
+      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'update_salary_config', resource_type: 'grade_salary_config', resource_id: data.id, resource_name: `Salary config for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+    } catch (_) {}
     return NextResponse.json({ data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });

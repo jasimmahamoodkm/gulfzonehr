@@ -13,6 +13,7 @@ import DatePicker from '@/components/ui/DatePicker';
 import TimePicker from '@/components/ui/TimePicker';
 import { Plus, Calendar, TrendingUp, Clock } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 
 const attendanceSchema = z.object({
@@ -28,6 +29,7 @@ type AttendanceFormData = z.infer<typeof attendanceSchema>;
 
 const AttendancePage: React.FC = () => {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showModal, setShowModal] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
@@ -35,6 +37,42 @@ const AttendancePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Determine user role for access control
+  const isAdmin = user?.roles?.some(r => ['Super Admin', 'Company Admin', 'HR Manager'].includes(r.role_name ?? '')) ?? false;
+  const isManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
+  const isEmployee = !isAdmin && !isManager;
+  const canEdit = isAdmin; // Manager is view-only for attendance
+
+  // Manager's own employee ID — used to scope their view
+  const [myEmployeeId, setMyEmployeeId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!isManager || !user?.id) return;
+    supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => { if (data) setMyEmployeeId(data.id); });
+  }, [isManager, user?.id]);
+
+  // Get current employee record if user is an employee
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+  React.useEffect(() => {
+    const getEmployeeId = async () => {
+      if (isEmployee && user?.id) {
+        try {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+          if (empData) {
+            setCurrentEmployeeId(empData.id);
+          }
+        } catch (err) {
+          console.error('Error fetching employee record:', err);
+        }
+      }
+    };
+    getEmployeeId();
+  }, [isEmployee, user?.id]);
 
   const {
     register,
@@ -55,28 +93,61 @@ const AttendancePage: React.FC = () => {
   const fetchAttendance = async (date: string) => {
     try {
       setLoading(true);
-      if (!selectedCompany) {
+      if (!selectedCompany && !isEmployee) {
         setAttendanceRecords([]);
         return;
       }
 
-      // Get employees for this company
-      const { data: empData, error: empError } = await supabase
-        .from('employees')
-        .select('id,first_name,last_name,position')
-        .eq('company_id', selectedCompany.id);
+      // For employees: show only their own attendance
+      if (isEmployee && currentEmployeeId) {
+        const { data: empData, error: empError } = await supabase
+          .from('employees')
+          .select('id,first_name,last_name,position')
+          .eq('id', currentEmployeeId)
+          .single();
 
-      if (empError) throw empError;
-      setEmployees(empData || []);
+        if (empError) throw empError;
+        setEmployees(empData ? [empData] : []);
 
-      // Get attendance records for the date
-      const { data: attData, error: attError } = await supabase
-        .from('attendance')
-        .select('id,employee_id,date,check_in,check_out,status,notes')
-        .eq('date', date);
+        // Get attendance records for this employee
+        const { data: attData, error: attError } = await supabase
+          .from('attendance')
+          .select('id,employee_id,date,check_in,check_out,status,notes')
+          .eq('employee_id', currentEmployeeId)
+          .eq('date', date);
 
-      if (attError) throw attError;
-      setAttendanceRecords(attData || []);
+        if (attError) throw attError;
+        setAttendanceRecords(attData || []);
+      } else if (isManager && myEmployeeId) {
+        // Manager: own record + assigned employees
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('id,first_name,last_name,position')
+          .eq('company_id', selectedCompany?.id || '')
+          .or(`id.eq.${myEmployeeId},manager_id.eq.${myEmployeeId}`);
+        setEmployees(empData || []);
+        const ids = (empData || []).map((e: any) => e.id);
+        const { data: attData } = await supabase
+          .from('attendance')
+          .select('id,employee_id,date,check_in,check_out,status,notes')
+          .in('employee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+          .eq('date', date);
+        setAttendanceRecords(attData || []);
+      } else if (selectedCompany) {
+        // Admin/HR: all employees' attendance
+        const { data: empData, error: empError } = await supabase
+          .from('employees')
+          .select('id,first_name,last_name,position')
+          .eq('company_id', selectedCompany.id);
+        if (empError) throw empError;
+        setEmployees(empData || []);
+        const { data: attData, error: attError } = await supabase
+          .from('attendance')
+          .select('id,employee_id,date,check_in,check_out,status,notes')
+          .eq('date', date);
+        if (attError) throw attError;
+        setAttendanceRecords(attData || []);
+      }
     } catch (err) {
       console.error('Error fetching attendance:', err);
       setMessage({ type: 'error', text: 'Failed to load attendance records' });
@@ -88,7 +159,7 @@ const AttendancePage: React.FC = () => {
   // Fetch attendance when date or company changes
   React.useEffect(() => {
     fetchAttendance(selectedDate);
-  }, [selectedDate, selectedCompany]);
+  }, [selectedDate, selectedCompany, currentEmployeeId, myEmployeeId]);
 
   const onSubmit = async (data: AttendanceFormData) => {
     try {
@@ -190,20 +261,26 @@ const AttendancePage: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Attendance Management</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEmployee ? 'My Attendance' : 'Attendance Management'}
+            </h1>
             <p className="text-gray-600 mt-1">
-              {selectedCompany ? `Track attendance at ${selectedCompany.name}` : 'Select a company to track attendance'}
+              {isEmployee
+                ? 'View your attendance records'
+                : selectedCompany ? `Track attendance at ${selectedCompany.name}` : 'Select a company to track attendance'}
             </p>
           </div>
-          <Button
-            variant="primary"
-            onClick={() => setShowModal(true)}
-            disabled={!selectedCompany}
-            className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={20} />
-            Manual Entry
-          </Button>
+          {canEdit && (
+            <Button
+              variant="primary"
+              onClick={() => setShowModal(true)}
+              disabled={!selectedCompany}
+              className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Plus size={20} />
+              Manual Entry
+            </Button>
+          )}
         </div>
 
         {!selectedCompany && (

@@ -179,7 +179,44 @@ FROM audit_logs al
 LEFT JOIN users u ON al.user_id = u.id
 LEFT JOIN companies c ON al.company_id = c.id;
 
-GRANT SELECT ON audit_logs TO authenticated;
-GRANT SELECT ON activity_logs TO authenticated;
+-- Enable RLS on audit tables
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- Allow authenticated users to INSERT their own audit logs
+CREATE POLICY "Users can insert their own audit logs" ON audit_logs
+  FOR INSERT
+  WITH CHECK (user_id = auth.uid() OR auth.uid() IS NOT NULL);
+
+-- Allow authenticated users to SELECT audit logs for their company
+CREATE POLICY "Users can view company audit logs" ON audit_logs
+  FOR SELECT
+  USING (
+    company_id IN (
+      SELECT company_id FROM user_company_roles
+      WHERE user_id = auth.uid()
+    )
+    OR auth.role() = 'authenticated'
+  );
+
+-- Allow activity log inserts
+CREATE POLICY "Users can insert activity logs" ON activity_logs
+  FOR INSERT
+  WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Allow activity log selects
+CREATE POLICY "Users can view activity logs" ON activity_logs
+  FOR SELECT
+  USING (
+    company_id IN (
+      SELECT company_id FROM user_company_roles
+      WHERE user_id = auth.uid()
+    )
+    OR auth.uid() = user_id
+  );
+
+-- Grant permissions
+GRANT SELECT, INSERT ON audit_logs TO authenticated;
+GRANT SELECT, INSERT ON activity_logs TO authenticated;
 GRANT SELECT ON audit_log_policies TO authenticated;
 GRANT SELECT ON audit_log_search TO authenticated;

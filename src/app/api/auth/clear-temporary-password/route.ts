@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔐 clear-temporary-password endpoint called');
 
     // Get the authorization header
     const authHeader = request.headers.get('Authorization');
-    console.log('📍 Authorization header present:', !!authHeader);
 
     if (!authHeader?.startsWith('Bearer ')) {
-      console.error('❌ Missing or invalid authorization header');
+      console.error('Missing or invalid authorization header');
       return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 });
     }
 
@@ -19,37 +18,31 @@ export async function POST(request: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('❌ Missing Supabase credentials');
+      console.error('Missing Supabase credentials');
       return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
     }
 
-    console.log('📍 Initializing Supabase admin client...');
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get current user session from the auth header
     const token = authHeader.substring(7);
-    console.log('📍 Token length:', token.length);
-    console.log('📍 Getting user from token...');
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError) {
-      console.error('❌ Failed to get user from token:', userError.message);
+      console.error('Failed to get user from token:', userError.message);
       console.error('Error code:', userError.code);
       return NextResponse.json({ error: `Unauthorized: ${userError.message}` }, { status: 401 });
     }
 
     if (!user) {
-      console.error('❌ User not found in token');
+      console.error('User not found in token');
       return NextResponse.json({ error: 'Unauthorized: No user in token' }, { status: 401 });
     }
 
-    console.log('✅ User authenticated:', user.email);
-    console.log('📍 Current user metadata:', user.user_metadata);
 
     // Clear the temporary password flag by updating user metadata
-    console.log('📍 Updating user metadata to clear is_temporary_password flag...');
-    const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       user.id,
       {
         user_metadata: {
@@ -60,15 +53,47 @@ export async function POST(request: NextRequest) {
     );
 
     if (updateError) {
-      console.error('❌ Failed to clear temporary password flag:', updateError.message);
+      console.error('Failed to clear temporary password flag:', updateError.message);
       return NextResponse.json(
         { error: `Failed to clear temporary password flag: ${updateError.message}` },
         { status: 500 }
       );
     }
 
-    console.log('✅ User metadata updated:', (updateData as any)?.user?.user_metadata);
-    console.log(`✅ Temporary password flag cleared for user: ${user.email}`);
+
+    // Log audit event (non-blocking)
+    try {
+      const ipAddress = getIpAddress(Object.fromEntries(request.headers.entries()));
+      const userAgent = getUserAgent(Object.fromEntries(request.headers.entries()));
+
+      // Get user company (non-blocking, don't fail if this fails)
+      let companyId: string | undefined = undefined;
+      try {
+        const { data: userData } = await supabaseAdmin
+          .from('users')
+          .select('company_id')
+          .eq('id', user.id)
+          .single();
+        companyId = (userData as any)?.company_id;
+      } catch (err) {
+        console.warn('Warning: Could not fetch user company:', err);
+      }
+
+      await logAuditEvent({
+        user_id: user.id,
+        company_id: companyId,
+        action: 'update_password',
+        resource_type: 'users',
+        resource_id: user.id,
+        resource_name: `Password updated - ${user.email}`,
+        status: 'success',
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      });
+    } catch (auditError) {
+      console.warn('Audit logging failed (non-critical):', auditError);
+      // Don't fail the request if audit logging fails
+    }
 
     return NextResponse.json({
       success: true,
@@ -76,8 +101,9 @@ export async function POST(request: NextRequest) {
       user_email: user.email,
     });
   } catch (error) {
-    console.error('❌ Error in clear-temporary-password endpoint:', error);
+    console.error('Error in clear-temporary-password endpoint:', error);
     const errorMsg = error instanceof Error ? error.message : String(error);
+
     return NextResponse.json(
       { error: `Internal server error: ${errorMsg}` },
       { status: 500 }

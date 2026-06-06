@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -39,28 +39,12 @@ export default function ChangePasswordRequiredPage() {
     resolver: zodResolver(changePasswordSchema),
   });
 
-  // Check if we need to redirect (user no longer has temp password and no success message)
-  React.useEffect(() => {
-    if (user && !user.is_temporary_password && message?.type !== 'success') {
-      console.log('🔄 User no longer has temporary password, redirecting...');
-      router.push('/employee-dashboard');
-    }
-  }, [user?.is_temporary_password, message?.type, router, user]);
-
   const onSubmit = async (data: ChangePasswordFormData) => {
-    console.log('🔐 Form submitted, onSubmit called');
     try {
       setIsSubmitting(true);
       setMessage(null);
 
-      console.log('🔐 Starting password change...');
-      console.log('📍 User ID:', user?.id);
-      console.log('📍 Current is_temporary_password:', user?.is_temporary_password);
-      console.log('📍 completePasswordChange function exists:', typeof completePasswordChange);
-
       await completePasswordChange(data.new_password);
-
-      console.log('✅ Password changed successfully');
 
       setMessage({
         type: 'success',
@@ -69,18 +53,12 @@ export default function ChangePasswordRequiredPage() {
 
       reset();
 
-      // Redirect to employee dashboard after success
       setTimeout(() => {
-        console.log('🔄 Redirecting to employee dashboard...');
         router.push('/employee-dashboard');
-      }, 2000);
+      }, 1500);
     } catch (err) {
       const errMsg = (err as any)?.message || 'Failed to change password';
-      console.error('❌ Error changing password:', err);
-      console.error('Error type:', err instanceof Error ? err.constructor.name : typeof err);
-      if (err instanceof Error) {
-        console.error('Error stack:', err.stack);
-      }
+      console.error('Error changing password:', err);
       setMessage({ type: 'error', text: errMsg });
     } finally {
       setIsSubmitting(false);

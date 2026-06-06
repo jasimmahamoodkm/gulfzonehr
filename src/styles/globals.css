@@ -31,3 +31,23 @@
     @apply bg-gray-400;
   }
 }
+
+/* ── Payslip print styles (fallback for popup-blocked browsers) ── */
+@media print {
+  /* Hide everything, then reveal only payslip content */
+  body * { visibility: hidden !important; }
+  #payslip-content,
+  #payslip-content * { visibility: visible !important; }
+  #payslip-content {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    background: white !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .bg-gray-900 { background-color: #111827 !important; }
+  .bg-gray-50  { background-color: #f9fafb !important; }
+}

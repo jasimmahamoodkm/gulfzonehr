@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -9,6 +10,7 @@ import { Calendar, Clock, DollarSign, FileText, AlertCircle } from 'lucide-react
 
 export default function EmployeeDashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [employeeData, setEmployeeData] = useState<any>(null);
   const [leaveBalance, setLeaveBalance] = useState<any>(null);
@@ -16,29 +18,38 @@ export default function EmployeeDashboardPage() {
   const [recentAttendance, setRecentAttendance] = useState<any[]>([]);
   const [latestPayslip, setLatestPayslip] = useState<any>(null);
 
+  // Redirect admins to main dashboard — they don't have employee records
   useEffect(() => {
     if (!user) return;
+    const isAdmin = user.roles?.some(r =>
+      r.role_name === 'Super Admin' ||
+      r.role_name === 'Company Admin' ||
+      r.role_name === 'HR Manager'
+    );
+    if (isAdmin) {
+      router.replace('/dashboard');
+      return;
+    }
     loadEmployeeData();
   }, [user]);
 
   const loadEmployeeData = async () => {
     try {
       setLoading(true);
-      console.log('📊 Loading employee dashboard data for user:', user?.id);
 
-      // Get employee profile
+      // Get employee profile by email (not company_id)
       const { data: empData, error: empError } = await supabase
         .from('employees')
         .select('*')
-        .eq('company_id', user?.company_id)
+        .eq('email', user?.email)
         .single();
 
       if (empError) {
-        console.error('❌ Error loading employee data:', empError);
-      } else {
-        console.log('✅ Employee data loaded:', empData);
-        setEmployeeData(empData);
+        // Not critical — employee record may not exist yet
+        setLoading(false);
+        return;
       }
+      setEmployeeData(empData);
 
       // Get leave balance
       const { data: balanceData, error: balanceError } = await supabase
@@ -48,7 +59,6 @@ export default function EmployeeDashboardPage() {
         .single();
 
       if (!balanceError) {
-        console.log('✅ Leave balance loaded:', balanceData);
         setLeaveBalance(balanceData);
       }
 
@@ -68,7 +78,6 @@ export default function EmployeeDashboardPage() {
         .order('start_date');
 
       if (!leavesError) {
-        console.log('✅ Upcoming leaves loaded:', leavesData);
         setUpcomingLeave(leavesData || []);
       }
 
@@ -85,7 +94,6 @@ export default function EmployeeDashboardPage() {
         .order('date', { ascending: false });
 
       if (!attendanceError) {
-        console.log('✅ Recent attendance loaded:', attendanceData);
         setRecentAttendance(attendanceData || []);
       }
 
@@ -99,11 +107,10 @@ export default function EmployeeDashboardPage() {
         .single();
 
       if (!payslipError) {
-        console.log('✅ Latest payslip loaded:', payslipData);
         setLatestPayslip(payslipData);
       }
     } catch (err) {
-      console.error('❌ Error loading employee dashboard:', err);
+      console.error('Error loading employee dashboard:', err);
     } finally {
       setLoading(false);
     }
@@ -305,25 +312,6 @@ export default function EmployeeDashboardPage() {
                   <p className="text-gray-600">Employment Type</p>
                   <p className="font-medium text-gray-900">{employeeData?.employment_type || 'N/A'}</p>
                 </div>
-              </div>
-            </Card>
-
-            {/* Quick Actions */}
-            <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Quick Links</h3>
-              <div className="space-y-2">
-                <a
-                  href="/leaves"
-                  className="block w-full px-4 py-2 text-center bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium text-sm"
-                >
-                  Request Leave
-                </a>
-                <a
-                  href="/payroll"
-                  className="block w-full px-4 py-2 text-center bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-medium text-sm"
-                >
-                  View Payslips
-                </a>
               </div>
             </Card>
           </div>

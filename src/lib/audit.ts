@@ -6,9 +6,14 @@
 import { createClient } from '@supabase/supabase-js';
 import type { CreateAuditLogRequest, AuditLogFilter, AuditLogSearchResult } from '@/types/audit';
 
+// Use service role key so audit inserts bypass RLS.
+// This module is only called from server-side API routes, never from the browser.
+// SUPABASE_SERVICE_ROLE_KEY is intentionally not prefixed with NEXT_PUBLIC_
+// so it is never exposed to the client bundle.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
 /**
@@ -40,10 +45,13 @@ export async function logAuditEvent(request: CreateAuditLogRequest) {
     if (!rpcError) return { success: true };
 
     // RPC failed — fall back to direct insert
+    // entity_type must be set (NOT NULL, no default in DB) — map from resource_type
     const { error: insertError } = await supabase.from('audit_logs').insert({
       user_id: request.user_id,
       company_id: request.company_id,
       action: request.action,
+      entity_type: request.resource_type || '',   // NOT NULL column
+      entity_id: request.resource_id || null,
       resource_type: request.resource_type,
       resource_id: request.resource_id || null,
       resource_name: request.resource_name || null,
@@ -372,14 +380,14 @@ export async function exportAuditLogsCSV(filter?: AuditLogFilter): Promise<strin
  * @param headers - Request headers
  * @returns IP address or null
  */
-export function getIpAddress(headers?: Record<string, string>): string | null {
-  if (!headers) return null;
+export function getIpAddress(headers?: Record<string, string>): string | undefined {
+  if (!headers) return undefined;
 
   return (
     headers['x-forwarded-for']?.split(',')[0] ||
     headers['x-real-ip'] ||
     headers['cf-connecting-ip'] ||
-    null
+    undefined
   );
 }
 
@@ -388,7 +396,7 @@ export function getIpAddress(headers?: Record<string, string>): string | null {
  * @param headers - Request headers
  * @returns User agent or null
  */
-export function getUserAgent(headers?: Record<string, string>): string | null {
-  if (!headers) return null;
-  return headers['user-agent'] || null;
+export function getUserAgent(headers?: Record<string, string>): string | undefined {
+  if (!headers) return undefined;
+  return headers['user-agent'] || undefined;
 }

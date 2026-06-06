@@ -5,9 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import DatePicker from '@/components/ui/DatePicker';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 import { EmployeeGrade, GradeLeaveConfig, GradeSalaryConfig, GradeBenefit, BenefitType } from '@/types/index';
+import { apiUrl } from '@/lib/api';
 import {
   ArrowLeft,
   Calendar,
@@ -49,6 +52,7 @@ export default function GradeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
+  const { selectedCompany } = useCompany();
   const gradeId = params.id as string;
 
   const [grade, setGrade] = useState<EmployeeGrade | null>(null);
@@ -66,9 +70,22 @@ export default function GradeDetailPage() {
   // Salary tab state
   const [salaryConfigs, setSalaryConfigs] = useState<GradeSalaryConfig[]>([]);
   const [showSalaryForm, setShowSalaryForm] = useState(false);
-  const [salaryForm, setSalaryForm] = useState({ salary: '', currency: 'AED', effective_from: '', effective_to: '', notes: '' });
+  const [salaryForm, setSalaryForm] = useState({
+    salary: '',
+    salary_component: 'Basic Salary',
+    currency: 'AED',
+    effective_from: '',
+    effective_to: '',
+    notes: ''
+  });
   const [savingSalary, setSavingSalary] = useState(false);
   const [salaryError, setSalaryError] = useState('');
+
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDateString = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
 
   // Benefits tab state
   const [benefits, setBenefits] = useState<GradeBenefit[]>([]);
@@ -98,7 +115,7 @@ export default function GradeDetailPage() {
   const fetchGrade = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -111,20 +128,22 @@ export default function GradeDetailPage() {
 
   // --- Load leave types ---
   const fetchLeaveTypes = useCallback(async () => {
-    if (!user?.company_id) return;
+    // Use selectedCompany first, fallback to user.company_id
+    const companyId = selectedCompany?.id || user?.company_id;
+    if (!companyId) return;
     const { data } = await supabase
       .from('leave_types')
       .select('id, name, color')
-      .eq('company_id', user.company_id)
+      .eq('company_id', companyId)
       .order('name');
     setLeaveTypes(data || []);
-  }, [user?.company_id]);
+  }, [selectedCompany?.id, user?.company_id]);
 
   // --- Load leave configs ---
   const fetchLeaveConfigs = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/leave-config`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/leave-config`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -136,7 +155,7 @@ export default function GradeDetailPage() {
   const fetchSalaryConfigs = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/salary-config`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/salary-config`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -148,7 +167,7 @@ export default function GradeDetailPage() {
   const fetchBenefits = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/benefits`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/benefits`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -184,7 +203,7 @@ export default function GradeDetailPage() {
     setSavingLeave(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/leave-config`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/leave-config`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,26 +235,47 @@ export default function GradeDetailPage() {
     setSavingSalary(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/salary-config`, {
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+
+
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/salary-config`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           salary: Number(salaryForm.salary),
+          salary_component: salaryForm.salary_component || 'Basic Salary',
           currency: salaryForm.currency || 'AED',
           effective_from: salaryForm.effective_from,
           effective_to: salaryForm.effective_to || undefined,
           notes: salaryForm.notes || undefined,
         }),
       });
+
+
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to save salary config');
+
+      if (!res.ok) {
+        throw new Error(json.error || `Failed to save salary config (Status: ${res.status})`);
+      }
+
       showNotification('Salary saved successfully');
       setShowSalaryForm(false);
-      setSalaryForm({ salary: '', currency: 'AED', effective_from: '', effective_to: '', notes: '' });
-      fetchSalaryConfigs();
-      fetchGrade();
+      setSalaryForm({
+        salary: '',
+        salary_component: 'Basic Salary',
+        currency: 'AED',
+        effective_from: getTodayDateString(),
+        effective_to: '',
+        notes: ''
+      });
+      await fetchSalaryConfigs();
+      await fetchGrade();
     } catch (err) {
-      setSalaryError(err instanceof Error ? err.message : 'Failed to save salary');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save salary';
+      console.error('Error saving salary:', errorMessage, err);
+      setSalaryError(errorMessage);
     } finally {
       setSavingSalary(false);
     }
@@ -244,7 +284,7 @@ export default function GradeDetailPage() {
   const deleteSalaryConfig = async (configId: string) => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/salary-config?config_id=${configId}`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/salary-config?config_id=${configId}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -285,7 +325,7 @@ export default function GradeDetailPage() {
     setSavingBenefit(true);
     try {
       const token = await getToken();
-      const url = `/api/admin/grades/${gradeId}/benefits`;
+      const url = apiUrl(`/api/admin/grades/${gradeId}/benefits`);
       const method = editingBenefit ? 'PATCH' : 'POST';
       const body = editingBenefit
         ? {
@@ -298,19 +338,29 @@ export default function GradeDetailPage() {
             benefit_value: benefitForm.benefit_value !== '' ? Number(benefitForm.benefit_value) : null,
           };
 
+
       const res = await fetch(url, {
         method,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+
+
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to save benefit');
+
+      if (!res.ok) {
+        const errorMsg = json.error || `Failed to save benefit (Status: ${res.status})`;
+        throw new Error(errorMsg);
+      }
+
       showNotification(editingBenefit ? 'Benefit updated' : 'Benefit added');
       setShowBenefitForm(false);
       resetBenefitForm();
-      fetchBenefits();
+      await fetchBenefits();
     } catch (err) {
-      setBenefitError(err instanceof Error ? err.message : 'Failed to save benefit');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save benefit';
+      console.error('[saveBenefit] Error:', errorMessage, err);
+      setBenefitError(errorMessage);
     } finally {
       setSavingBenefit(false);
     }
@@ -319,7 +369,7 @@ export default function GradeDetailPage() {
   const toggleBenefitActive = async (benefit: GradeBenefit) => {
     try {
       const token = await getToken();
-      await fetch(`/api/admin/grades/${gradeId}/benefits`, {
+      await fetch(apiUrl(`/api/admin/grades/${gradeId}/benefits`), {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ benefit_id: benefit.id, active: !benefit.active }),
@@ -331,7 +381,7 @@ export default function GradeDetailPage() {
   const deleteBenefit = async (benefitId: string) => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/grades/${gradeId}/benefits?benefit_id=${benefitId}`, {
+      const res = await fetch(apiUrl(`/api/admin/grades/${gradeId}/benefits?benefit_id=${benefitId}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -571,7 +621,12 @@ export default function GradeDetailPage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => { setShowSalaryForm(true); setSalaryError(''); }}
+                  onClick={() => {
+                    setShowSalaryForm(true);
+                    setSalaryError('');
+                    // Auto-select today's date
+                    setSalaryForm(f => ({ ...f, effective_from: getTodayDateString() }));
+                  }}
                 >
                   <Plus size={16} />
                   Set New Band
@@ -580,9 +635,9 @@ export default function GradeDetailPage() {
 
               {/* Add Salary Band Form */}
               {showSalaryForm && (
-                <div className="px-6 py-4 bg-blue-50 border-b border-blue-100">
+                <div className="px-6 py-4 bg-blue-50 border-b border-blue-100 overflow-visible">
                   <h3 className="text-sm font-semibold text-gray-800 mb-3">New Salary</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 relative z-0">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Salary *</label>
                       <input
@@ -591,6 +646,16 @@ export default function GradeDetailPage() {
                         value={salaryForm.salary}
                         onChange={e => setSalaryForm(f => ({ ...f, salary: e.target.value }))}
                         placeholder="8000"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Salary Component *</label>
+                      <input
+                        type="text"
+                        value={salaryForm.salary_component}
+                        onChange={e => setSalaryForm(f => ({ ...f, salary_component: e.target.value }))}
+                        placeholder="e.g., Basic Salary"
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -608,20 +673,18 @@ export default function GradeDetailPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Effective From *</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={salaryForm.effective_from}
-                        onChange={e => setSalaryForm(f => ({ ...f, effective_from: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(date) => setSalaryForm(f => ({ ...f, effective_from: date }))}
+                        placeholder="Select effective from date"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Effective To</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={salaryForm.effective_to}
-                        onChange={e => setSalaryForm(f => ({ ...f, effective_to: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(date) => setSalaryForm(f => ({ ...f, effective_to: date }))}
+                        placeholder="Select effective to date (optional)"
                       />
                     </div>
                     <div>

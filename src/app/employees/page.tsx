@@ -11,9 +11,11 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2 } from 'lucide-react';
+import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2, UserCheck } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { apiUrl, logActivity } from '@/lib/api';
 
 // Schema for Add Employee (auto-creation API)
 const createEmployeeSchema = z.object({
@@ -34,6 +36,36 @@ const ITEMS_PER_PAGE = 20;
 const EmployeesPage: React.FC = () => {
   const router = useRouter();
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
+
+  // Role flags
+  const isDeptManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
+  const isAdminOrHR = user?.roles?.some(r =>
+    ['Super Admin', 'Company Admin', 'HR Manager'].includes(r.role_name || '')
+  ) ?? false;
+  // Manager: view only — no create, edit, delete, grade assign, password reset, manager assign
+  const canManageEmployees = isAdminOrHR;
+
+  // Manager assignment modal state
+  const [showManagerModal, setShowManagerModal] = useState(false);
+  const [managerTarget, setManagerTarget] = useState<{ id: string; name: string; currentManagerId: string | null } | null>(null);
+  const [availableManagers, setAvailableManagers] = useState<{ id: string; name: string }[]>([]);
+  const [selectedManagerId, setSelectedManagerId] = useState<string>('');
+  const [savingManager, setSavingManager] = useState(false);
+
+  // Current manager's employee ID (used to scope their data view)
+  const [myEmployeeId, setMyEmployeeId] = React.useState<string | null>(null);
+
+  // Fetch manager's own employee ID on mount
+  React.useEffect(() => {
+    if (!isDeptManager || !user?.id) return;
+    supabase
+      .from('employees')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setMyEmployeeId(data.id); });
+  }, [isDeptManager, user?.id]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -115,13 +147,15 @@ const EmployeesPage: React.FC = () => {
         return;
       }
 
+
       // Get current auth session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         throw new Error('Authentication required. Please log in again.');
       }
 
-      const response = await fetch('/api/admin/create-employee', {
+
+      const response = await fetch(apiUrl('/api/admin/create-employee'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -140,10 +174,12 @@ const EmployeesPage: React.FC = () => {
         }),
       });
 
+
       const result = await response.json();
 
+
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to create employee');
+        throw new Error(result.error || `Failed to create employee (Status: ${response.status})`);
       }
 
       if (result.success && result.data) {
@@ -158,14 +194,14 @@ const EmployeesPage: React.FC = () => {
           text: 'Employee created successfully! Share the temporary password with the employee.',
         });
         resetCreate();
-        fetchEmployees(currentPage);
+        await fetchEmployees(currentPage);
       } else {
         throw new Error('Unexpected response format');
       }
     } catch (err) {
       const errMsg = (err as any)?.message || (err as any)?.error?.message || 'Failed to create employee';
+      console.error('[Create Employee] Error:', errMsg, err);
       setCreateMessage({ type: 'error', text: errMsg });
-      console.error('Error creating employee:', err);
     } finally {
       setCreateLoading(false);
     }
@@ -207,6 +243,87 @@ const EmployeesPage: React.FC = () => {
     }
   };
 
+
+  // Open manager assignment modal
+  const openManagerModal = async (employee: any) => {
+    setManagerTarget({
+      id: employee.id,
+      name: `${employee.first_name} ${employee.last_name}`,
+      currentManagerId: employee.manager_id ?? null,
+    });
+    setSelectedManagerId(employee.manager_id ?? '');
+    setShowManagerModal(true);
+
+    // Load managers: employees with Manager role in this company
+    if (selectedCompany) {
+      const { data } = await supabase
+        .from('employees')
+        .select('id,first_name,last_name,user_id')
+        .eq('company_id', selectedCompany.id)
+        .neq('id', employee.id); // exclude self
+
+      if (data) {
+        // Filter to those who have Manager role via user_roles
+        const userIds = data.map(e => e.user_id).filter(Boolean);
+        if (userIds.length > 0) {
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('user_id, roles(name)')
+            .in('user_id', userIds);
+
+          const managerUserIds = new Set(
+            roleData
+              ?.filter((r: any) => r.roles?.name === 'Manager')
+              .map((r: any) => r.user_id) || []
+          );
+
+          const managers = data
+            .filter(e => managerUserIds.has(e.user_id))
+            .map(e => ({ id: e.id, name: `${e.first_name} ${e.last_name}` }));
+
+          setAvailableManagers(managers);
+        } else {
+          setAvailableManagers([]);
+        }
+      }
+    }
+  };
+
+  const saveManagerAssignment = async () => {
+    if (!managerTarget) return;
+    try {
+      setSavingManager(true);
+
+      // Use API route — server enforces that only Super Admin, Company Admin,
+      // and HR Manager can assign managers (regardless of UI bypass attempts).
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch(apiUrl('/api/employees/assign-manager'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          employee_id: managerTarget.id,
+          manager_id: selectedManagerId || null,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to assign manager');
+
+      setShowManagerModal(false);
+      setManagerTarget(null);
+      fetchEmployees(currentPage);
+    } catch (err) {
+      alert('Failed to assign manager: ' + ((err as any)?.message || 'Unknown error'));
+    } finally {
+      setSavingManager(false);
+    }
+  };
+
   // Fetch employees from database with pagination
   const fetchEmployees = async (page: number = 1) => {
     try {
@@ -215,43 +332,69 @@ const EmployeesPage: React.FC = () => {
         setEmployees([]);
         return;
       }
+      // For manager: wait until their employee ID is resolved.
+      // If still null, show empty rather than leaking all employee data.
+      if (isDeptManager && !myEmployeeId) {
+        setEmployees([]);
+        setTotalCount(0);
+        return;
+      }
 
       const offset = (page - 1) * ITEMS_PER_PAGE;
+      const selectCols = 'id,first_name,last_name,email,phone,position,department,employment_type,date_of_joining,status,created_at,grade_id,manager_id,employee_grades(name,level)';
 
-      // Fetch total count
-      const { count } = await supabase
-        .from('employees')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', selectedCompany.id);
+      if (isDeptManager && myEmployeeId) {
+        // Manager sees: themselves + their directly assigned employees
+        const { count } = await supabase
+          .from('employees')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', selectedCompany.id)
+          .or(`id.eq.${myEmployeeId},manager_id.eq.${myEmployeeId}`);
+        setTotalCount(count || 0);
 
-      setTotalCount(count || 0);
+        const { data, error } = await supabase
+          .from('employees')
+          .select(selectCols)
+          .eq('company_id', selectedCompany.id)
+          .or(`id.eq.${myEmployeeId},manager_id.eq.${myEmployeeId}`)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + ITEMS_PER_PAGE - 1);
+        if (error) throw error;
+        setEmployees(data || []);
+      } else {
+        // Admin / HR Manager: all company employees
+        const { count } = await supabase
+          .from('employees')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', selectedCompany.id);
+        setTotalCount(count || 0);
 
-      // Fetch paginated data — include grade info
-      const { data, error } = await supabase
-        .from('employees')
-        .select('id,first_name,last_name,email,phone,position,department,employment_type,date_of_joining,status,created_at,grade_id,employee_grades(name,level)')
-        .eq('company_id', selectedCompany.id)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + ITEMS_PER_PAGE - 1);
+        const { data, error } = await supabase
+          .from('employees')
+          .select(selectCols)
+          .eq('company_id', selectedCompany.id)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + ITEMS_PER_PAGE - 1);
+        if (error) throw error;
+        setEmployees(data || []);
+      }
 
-      if (error) throw error;
-      setEmployees(data || []);
       setCurrentPage(page);
     } catch (err) {
-      const errorMsg = (err as any)?.message || (err as any)?.error?.message || 'Failed to load employees';
-      console.error('Error fetching employees:', err, errorMsg);
+      const errorMsg = (err as any)?.message || 'Failed to load employees';
       setMessage({ type: 'error', text: errorMsg });
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch employees when company changes
+  // Fetch employees when company or myEmployeeId changes
+  // myEmployeeId is async — including it ensures manager's view loads after it resolves
   React.useEffect(() => {
     setCurrentPage(1);
     fetchEmployees(1);
     if (selectedCompany) fetchGrades(selectedCompany.id);
-  }, [selectedCompany]);
+  }, [selectedCompany, myEmployeeId]);
 
   // Open the grade assignment modal for a specific employee
   const openGradeModal = (employee: any) => {
@@ -280,7 +423,7 @@ const EmployeesPage: React.FC = () => {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.access_token) {
-            await fetch('/api/admin/employees/init-leave-balance', {
+            await fetch(apiUrl('/api/admin/employees/init-leave-balance'), {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${session.access_token}`,
@@ -297,6 +440,18 @@ const EmployeesPage: React.FC = () => {
           // Non-blocking — don't fail the grade save if leave init fails
         }
       }
+
+      // Audit log
+      const gradeName = grades.find(g => g.id === selectedGradeId)?.name;
+      await logActivity(supabase, {
+        company_id: selectedCompany?.id ?? null,
+        action: selectedGradeId ? 'assign_grade' : 'unassign_grade',
+        resource_type: 'employees',
+        resource_id: gradeTarget.id,
+        resource_name: selectedGradeId
+          ? `Grade "${gradeName ?? selectedGradeId}" assigned to ${gradeTarget.name}`
+          : `Grade removed from ${gradeTarget.name}`,
+      });
 
       setMessage({ type: 'success', text: `Grade updated for ${gradeTarget.name}` });
       setTimeout(() => setMessage(null), 3000);
@@ -386,7 +541,7 @@ const EmployeesPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch('/api/admin/generate-temp-password', {
+      const response = await fetch(apiUrl('/api/admin/generate-temp-password'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -546,6 +701,10 @@ const EmployeesPage: React.FC = () => {
       label: 'Actions',
       render: (_: any, row: any) => (
         <div className="flex gap-2">
+          {!canManageEmployees ? (
+            <span className="text-xs text-gray-400 italic">View only</span>
+          ) : (
+            <>
           <button
             onClick={() => openEditModal(row)}
             className="p-1 hover:bg-gray-200 rounded transition"
@@ -560,6 +719,15 @@ const EmployeesPage: React.FC = () => {
           >
             <Award size={18} className="text-purple-600" />
           </button>
+          {isAdminOrHR && (
+            <button
+              onClick={() => openManagerModal(row)}
+              className="p-1 hover:bg-gray-200 rounded transition"
+              title="Assign Manager"
+            >
+              <UserCheck size={18} className="text-teal-600" />
+            </button>
+          )}
           <button
             onClick={() => generateTemporaryPassword(row.id, `${row.first_name} ${row.last_name}`)}
             disabled={generatingPassword === row.id}
@@ -576,6 +744,8 @@ const EmployeesPage: React.FC = () => {
           >
             <Trash2 size={18} className="text-red-600" />
           </button>
+            </>
+          )}
         </div>
       ),
     },
@@ -620,26 +790,28 @@ const EmployeesPage: React.FC = () => {
               {selectedCompany ? `Manage employees at ${selectedCompany.name}` : 'Select a company to view employees'}
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => router.push('/employees/import')}
-              disabled={!selectedCompany}
-              className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Upload size={20} />
-              Import CSV
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => setShowCreateModal(true)}
-              disabled={!selectedCompany}
-              className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus size={20} />
-              Add Employee
-            </Button>
-          </div>
+          {canManageEmployees && (
+            <div className="flex gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => router.push('/employees/import')}
+                disabled={!selectedCompany}
+                className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Upload size={20} />
+                Import CSV
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setShowCreateModal(true)}
+                disabled={!selectedCompany}
+                className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus size={20} />
+                Add Employee
+              </Button>
+            </div>
+          )}
         </div>
 
         {!selectedCompany && (
@@ -790,7 +962,7 @@ const EmployeesPage: React.FC = () => {
           )
         }
       >
-        <form className="space-y-4">
+        <form className="space-y-4 overflow-visible">
           {createMessage && (
             <div className={`p-3 rounded-lg ${
               createMessage.type === 'success'
@@ -1262,6 +1434,48 @@ const EmployeesPage: React.FC = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Assign Manager Modal */}
+      <Modal
+        isOpen={showManagerModal}
+        onClose={() => { setShowManagerModal(false); setManagerTarget(null); }}
+        title={`Assign Manager — ${managerTarget?.name || ''}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setShowManagerModal(false); setManagerTarget(null); }}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveManagerAssignment} disabled={savingManager}>
+              {savingManager ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Select a Manager to assign to this employee. The manager will be able to view this employee's data.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
+            <select
+              value={selectedManagerId}
+              onChange={e => setSelectedManagerId(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— No Manager (unassign) —</option>
+              {availableManagers.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            {availableManagers.length === 0 && (
+              <p className="mt-2 text-xs text-gray-500">
+                No Managers found in this company. Assign the Manager role first via RBAC.
+              </p>
+            )}
+          </div>
+        </div>
       </Modal>
     </Layout>
   );

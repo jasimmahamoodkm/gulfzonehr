@@ -10,9 +10,14 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Table from '@/components/ui/Table';
 import DatePicker from '@/components/ui/DatePicker';
-import { Plus, AlertCircle, Clock, CheckCircle, Eye, Trash2 } from 'lucide-react';
+import { Plus, AlertCircle, Clock, CheckCircle, Eye, Trash2, Lock } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { apiUrl, logActivity } from '@/lib/api';
+import { processFileForUpload, isCompressibleImage, formatFileSize } from '@/lib/imageCompression';
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB in bytes
 
 const documentSchema = z.object({
   employee_id: z.string().optional(),
@@ -28,12 +33,38 @@ const documentSchema = z.object({
     message: 'Expiry date must be after issue date',
     path: ['expiry_date'],
   }
+).refine(
+  (data) => {
+    if (!data.file || data.file.length === 0) return true; // File is optional
+    const file = data.file[0];
+    return file.size <= MAX_FILE_SIZE;
+  },
+  {
+    message: 'File size must be less than 2 MB',
+    path: ['file'],
+  }
 );
 
 type DocumentFormData = z.infer<typeof documentSchema>;
 
 const DocumentsPage: React.FC = () => {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
+
+  // Determine user role
+  const isDeptManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
+  const isAdminOrHR = user?.roles?.some(r =>
+    r.role_name === 'Super Admin' ||
+    r.role_name === 'Company Admin' ||
+    r.role_name === 'HR Manager'
+  ) || false;
+  const isAdmin = isAdminOrHR || isDeptManager;
+  const isEmployee = !isAdmin;
+
+  // Manager role: can VIEW documents but NOT upload/delete
+  const canUploadDocuments = isAdminOrHR;
+  const canDeleteDocuments = isAdminOrHR;
+
   const [showModal, setShowModal] = useState(false);
   const [documentFilter, setDocumentFilter] = useState<'all' | 'expiring' | 'expired'>('all');
   const [documents, setDocuments] = useState<any[]>([]);
@@ -41,6 +72,29 @@ const DocumentsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+
+  // Get current employee ID if user is an employee
+  React.useEffect(() => {
+    const getEmployeeId = async () => {
+      if (isEmployee && user?.id) {
+        try {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+          if (empData) {
+            setCurrentEmployeeId(empData.id);
+          }
+        } catch (err) {
+          console.error('Error fetching employee record:', err);
+        }
+      }
+    };
+    getEmployeeId();
+  }, [isEmployee, user?.id]);
 
   const {
     register,
@@ -55,55 +109,141 @@ const DocumentsPage: React.FC = () => {
 
   const issueDate = watch('issue_date');
   const expiryDate = watch('expiry_date');
+  const fileWatch = watch('file');
+
+  // Handle file change to show file info
+  useEffect(() => {
+    if (fileWatch && fileWatch.length > 0) {
+      const file = fileWatch[0];
+      setSelectedFile(file);
+    } else {
+      setSelectedFile(null);
+    }
+  }, [fileWatch]);
 
   // Fetch documents and employees
   const fetchDocuments = async () => {
     try {
       setLoading(true);
-      if (!selectedCompany) {
-        setDocuments([]);
+
+      // For employees: show only their own documents
+      // For dept managers: show own + their assigned employees' documents
+      if (isDeptManager && currentEmployeeId) {
+        const { data: managedEmps } = await supabase
+          .from('employees')
+          .select('*')
+          .or(`id.eq.${currentEmployeeId},manager_id.eq.${currentEmployeeId}`)
+          .eq('company_id', selectedCompany?.id || '');
+        setEmployees(managedEmps || []);
+
+        const managedIds = (managedEmps || []).map((e: any) => e.id);
+        const { data: docData, error } = await supabase
+          .from('documents')
+          .select('*, employees(first_name, last_name)')
+          .in('employee_id', managedIds.length > 0 ? managedIds : ['00000000-0000-0000-0000-000000000000'])
+          .order('expiry_date', { ascending: true });
+        if (error) throw error;
+
+        const enrichedDocs = (docData || []).map((doc: any) => {
+          const expiry = new Date(doc.expiry_date);
+          const today = new Date();
+          const diffMs = expiry.getTime() - today.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          const status = diffDays < 0 ? 'Expired' : diffDays <= 30 ? 'Expiring Soon' : 'Active';
+          const employee = doc.employees;
+          return {
+            ...doc,
+            days_until_expiry: diffDays,
+            status,
+            employee_name: employee ? `${employee.first_name} ${employee.last_name}` : 'N/A',
+          };
+        });
+        setDocuments(enrichedDocs);
         return;
       }
 
-      // Get employees
-      const { data: empData } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('company_id', selectedCompany.id);
+      if (isEmployee && currentEmployeeId) {
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('id', currentEmployeeId)
+          .single();
 
-      setEmployees(empData || []);
+        setEmployees(empData ? [empData] : []);
 
-      // Get documents
-      const { data: docData, error } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('company_id', selectedCompany.id)
-        .order('expiry_date', { ascending: true });
+        // Get documents for this employee
+        const { data: docData, error } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('employee_id', currentEmployeeId)
+          .order('expiry_date', { ascending: true });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      // Enrich documents with employee names and calculate status
-      const enrichedDocs = (docData || []).map((doc: any) => {
-        const expiry = new Date(doc.expiry_date);
-        const today = new Date();
-        const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        // Enrich documents with employee names and calculate status
+        const enrichedDocs = (docData || []).map((doc: any) => {
+          const expiry = new Date(doc.expiry_date);
+          const today = new Date();
+          const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-        let status = 'Active';
-        if (daysUntilExpiry < 0) status = 'Expired';
-        else if (daysUntilExpiry <= 30) status = 'Expiring Soon';
+          let status = 'Active';
+          if (daysUntilExpiry < 0) status = 'Expired';
+          else if (daysUntilExpiry <= 30) status = 'Expiring Soon';
 
-        const emp = empData?.find((e: any) => e.id === doc.employee_id);
-        const employeeName = emp ? `${emp.first_name} ${emp.last_name}` : (doc.employee_name || selectedCompany.name);
+          const employeeName = empData ? `${empData.first_name} ${empData.last_name}` : 'Unknown';
 
-        return {
-          ...doc,
-          employee_name: employeeName,
-          status,
-          days_until_expiry: daysUntilExpiry,
-        };
-      });
+          return {
+            ...doc,
+            employee_name: employeeName,
+            status,
+            days_until_expiry: daysUntilExpiry,
+          };
+        });
 
-      setDocuments(enrichedDocs);
+        setDocuments(enrichedDocs);
+      } else if (selectedCompany) {
+        // For admin/manager: show all employees' documents
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('company_id', selectedCompany.id);
+
+        setEmployees(empData || []);
+
+        // Get documents
+        const { data: docData, error } = await supabase
+          .from('documents')
+          .select('*')
+          .eq('company_id', selectedCompany.id)
+          .order('expiry_date', { ascending: true });
+
+        if (error) throw error;
+
+        // Enrich documents with employee names and calculate status
+        const enrichedDocs = (docData || []).map((doc: any) => {
+          const expiry = new Date(doc.expiry_date);
+          const today = new Date();
+          const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          let status = 'Active';
+          if (daysUntilExpiry < 0) status = 'Expired';
+          else if (daysUntilExpiry <= 30) status = 'Expiring Soon';
+
+          const emp = empData?.find((e: any) => e.id === doc.employee_id);
+          const employeeName = emp ? `${emp.first_name} ${emp.last_name}` : (doc.employee_name || selectedCompany.name);
+
+          return {
+            ...doc,
+            employee_name: employeeName,
+            status,
+            days_until_expiry: daysUntilExpiry,
+          };
+        });
+
+        setDocuments(enrichedDocs);
+      } else {
+        setDocuments([]);
+      }
     } catch (err) {
       console.error('Error fetching documents:', err);
       setMessage({ type: 'error', text: 'Failed to load documents' });
@@ -114,7 +254,7 @@ const DocumentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
-  }, [selectedCompany]);
+  }, [selectedCompany, currentEmployeeId, isEmployee]);
 
   const onSubmit = async (data: DocumentFormData) => {
     try {
@@ -125,7 +265,19 @@ const DocumentsPage: React.FC = () => {
 
       // Handle file upload if provided
       if (data.file && data.file.length > 0) {
-        const file = data.file[0];
+        let file = data.file[0];
+
+        // Process file (compress images to WebP if needed)
+
+        if (isCompressibleImage(file)) {
+          try {
+            file = await processFileForUpload(file);
+          } catch (compressionError) {
+            console.warn('File compression failed, uploading original:', compressionError);
+            // Continue with original file if compression fails
+          }
+        }
+
         const fileExt = file.name.split('.').pop();
         const fileName = `${selectedCompany?.id}/${data.employee_id || 'company'}/${Date.now()}.${fileExt}`;
 
@@ -135,14 +287,12 @@ const DocumentsPage: React.FC = () => {
 
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage
-          .from('documents')
-          .getPublicUrl(fileName);
-
-        fileUrl = urlData.publicUrl;
+        // Store the file path (not a public URL) so we can generate
+        // signed URLs on demand. The bucket is private for security.
+        fileUrl = fileName;
       }
 
-      const { error } = await supabase.from('documents').insert({
+      const { data: inserted, error } = await supabase.from('documents').insert({
         company_id: selectedCompany?.id,
         employee_id: data.employee_id || null,
         document_type: data.document_type,
@@ -151,9 +301,18 @@ const DocumentsPage: React.FC = () => {
         expiry_date: data.expiry_date,
         issuing_authority: data.issuing_authority,
         file_url: fileUrl,
-      });
+      }).select('id').single();
 
       if (error) throw error;
+
+      // Audit log
+      await logActivity(supabase, {
+        company_id: selectedCompany?.id ?? null,
+        action: 'create_document',
+        resource_type: 'documents',
+        resource_id: inserted?.id ?? null,
+        resource_name: `${data.document_type} — ${data.document_number}`,
+      });
 
       setMessage({ type: 'success', text: 'Document added successfully' });
       reset();
@@ -182,9 +341,45 @@ const DocumentsPage: React.FC = () => {
     return <AlertCircle size={16} className="text-red-600" />;
   };
 
-  const handleViewDocument = (fileUrl: string) => {
-    if (fileUrl) {
-      window.open(fileUrl, '_blank');
+  const handleViewDocument = async (filePath: string) => {
+    if (!filePath) return;
+
+    try {
+      let storagePath = filePath;
+
+      // Extract the storage path from legacy full URLs
+      // e.g. https://.../storage/v1/object/public/documents/company/emp/file.webp
+      //   → company/emp/file.webp
+      if (filePath.startsWith('http')) {
+        const marker = '/object/public/documents/';
+        const markerAlt = '/object/sign/documents/';
+        const idx = filePath.indexOf(marker) !== -1
+          ? filePath.indexOf(marker) + marker.length
+          : filePath.indexOf(markerAlt) !== -1
+            ? filePath.indexOf(markerAlt) + markerAlt.length
+            : -1;
+
+        if (idx === -1) {
+          // Unknown URL format — open directly as fallback
+          window.open(filePath, '_blank');
+          return;
+        }
+        // Strip any query string (e.g. signed URL tokens)
+        storagePath = filePath.substring(idx).split('?')[0];
+      }
+
+      // Generate a 1-hour signed URL for the private bucket
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(storagePath, 3600);
+
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (err) {
+      console.error('Failed to generate document URL:', err);
+      alert('Could not open document. Please try again.');
     }
   };
 
@@ -194,27 +389,35 @@ const DocumentsPage: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', documentId);
+      // Use API route with service role key — bypasses RLS for all roles including HR Manager
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (error) throw error;
+      const res = await fetch(apiUrl(`/api/documents/${documentId}`), {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to delete document');
 
       setMessage({ type: 'success', text: 'Document deleted successfully' });
       fetchDocuments();
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
       console.error('Error deleting document:', err);
-      setMessage({ type: 'error', text: 'Failed to delete document' });
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to delete document' });
     }
   };
 
   const columns = [
-    {
+    ...(isAdmin ? [{
       key: 'employee_name',
       label: 'Name/Company',
-    },
+    }] : []),
     {
       key: 'document_type',
       label: 'Document Type',
@@ -269,13 +472,15 @@ const DocumentsPage: React.FC = () => {
           >
             <Eye size={18} />
           </button>
-          <button
-            onClick={() => handleDeleteDocument(value, row.document_type)}
-            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-            title="Delete document"
-          >
-            <Trash2 size={18} />
-          </button>
+          {canDeleteDocuments && (
+            <button
+              onClick={() => handleDeleteDocument(value, row.document_type)}
+              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+              title="Delete document"
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -287,29 +492,52 @@ const DocumentsPage: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Document Management</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEmployee ? 'My Documents' : 'Document Management'}
+            </h1>
             <p className="text-gray-600 mt-1">
-              {selectedCompany ? `Track documents for ${selectedCompany.name}` : 'Select a company to manage documents'}
+              {isEmployee
+                ? 'View your documents'
+                : selectedCompany ? `Track documents for ${selectedCompany.name}` : 'Select a company to manage documents'}
             </p>
           </div>
           <Button
             variant="primary"
             onClick={() => setShowModal(true)}
-            disabled={!selectedCompany}
+            disabled={!selectedCompany || !canUploadDocuments}
+            title={!canUploadDocuments ? 'Only Admins and Managers can upload documents' : ''}
             className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus size={20} />
-            Add Document
+            {!canUploadDocuments ? (
+              <>
+                <Lock size={20} />
+                Upload Restricted
+              </>
+            ) : (
+              <>
+                <Plus size={20} />
+                Add Document
+              </>
+            )}
           </Button>
         </div>
 
-        {!selectedCompany && (
+        {!selectedCompany && !isEmployee && (
           <Card className="bg-blue-50 border border-blue-200">
             <p className="text-blue-700 text-center py-4">Please select a company from the header to manage documents</p>
           </Card>
         )}
 
-        {selectedCompany && (
+        {selectedCompany && !canUploadDocuments && !isEmployee && (
+          <Card className="bg-amber-50 border border-amber-200">
+            <div className="flex items-center gap-2 text-amber-700">
+              <Lock size={18} />
+              <p>You have view-only access. Only Admins and Managers can upload documents.</p>
+            </div>
+          </Card>
+        )}
+
+        {(selectedCompany || isEmployee) && (
           <>
         {/* Loading State */}
         {loading && (
@@ -522,10 +750,28 @@ const DocumentsPage: React.FC = () => {
             <input
               {...register('file')}
               type="file"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.txt"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="mt-1 text-xs text-gray-500">Supported formats: PDF, DOC, DOCX, JPG, PNG, TXT (Max 10MB)</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Supported formats: PDF, DOC, DOCX, JPG, PNG, WebP, TXT (Max 2 MB)
+            </p>
+            <p className="mt-1 text-xs text-blue-600">
+              💡 Images are automatically compressed to WebP format for optimal storage
+            </p>
+            {selectedFile && (
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs font-medium text-blue-900">📁 Selected File:</p>
+                <p className="text-xs text-blue-700 mt-1">{selectedFile.name}</p>
+                <p className="text-xs text-blue-700">Size: {formatFileSize(selectedFile.size)}</p>
+                {isCompressibleImage(selectedFile) && (
+                  <p className="text-xs text-blue-700 mt-1">✅ Will be compressed to WebP</p>
+                )}
+              </div>
+            )}
+            {errors.file && errors.file.message && (
+              <p className="mt-1 text-sm text-red-600">{String(errors.file.message)}</p>
+            )}
           </div>
         </form>
       </Modal>

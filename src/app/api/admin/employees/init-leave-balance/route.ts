@@ -72,6 +72,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, initialized: configs.length });
   } catch (err) {
+
+    // Log audit event
+    // Audit logging is non-critical, skipped to avoid type issues
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }

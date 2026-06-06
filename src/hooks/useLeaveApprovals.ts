@@ -9,6 +9,7 @@ import { useCallback, useContext, useState } from 'react';
 import { AuthContext } from '@/context/AuthContext';
 import { logAuditEvent } from '@/lib/audit';
 import type { LeaveApprovalRequest, LeaveRejectionRequest } from '@/types/leaves';
+import { apiUrl } from '@/lib/api';
 
 export function useLeaveApprovals() {
   const context = useContext(AuthContext);
@@ -30,7 +31,7 @@ export function useLeaveApprovals() {
       setError(null);
 
       try {
-        const response = await fetch('/api/leaves/approve', {
+        const response = await fetch(apiUrl('/api/leaves/approve'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -101,7 +102,7 @@ export function useLeaveApprovals() {
       setError(null);
 
       try {
-        const response = await fetch('/api/leaves/reject', {
+        const response = await fetch(apiUrl('/api/leaves/reject'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -178,7 +179,7 @@ export function useLeaveApprovals() {
       setError(null);
 
       try {
-        const response = await fetch('/api/leaves/apply', {
+        const response = await fetch(apiUrl('/api/leaves/apply'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -241,7 +242,7 @@ export function useLeaveApprovals() {
       }
 
       try {
-        const response = await fetch('/api/leaves/balance', {
+        const response = await fetch(apiUrl('/api/leaves/balance'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

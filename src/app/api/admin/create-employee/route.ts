@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateTemporaryPassword } from '@/lib/employeeCreation';
+import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
 
 // Server-side Supabase client with service role key (for admin operations)
 const supabaseAdmin = createClient(
@@ -28,6 +29,7 @@ interface CreateEmployeeRequest {
 
 export async function POST(request: NextRequest) {
   try {
+
     // Verify admin authorization (you can enhance this)
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (authError) {
-      console.error('Auth error:', authError);
+      console.error('[Create Employee] Auth error:', authError);
 
       // Check for duplicate email error
       const errorMessage = authError.message || '';
@@ -96,7 +98,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (userError) {
-      console.error('User record error:', userError);
+      console.error('[Create Employee] User record error:', userError);
       // Delete the auth user if we can't create the db record
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json(
@@ -104,6 +106,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
 
     // Step 3: Create employee record
     const { data: employeeData, error: employeeError } = await supabaseAdmin
@@ -125,12 +128,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (employeeError) {
-      console.error('Employee record error:', employeeError);
+      console.error('[Create Employee] Employee record error:', employeeError);
       return NextResponse.json(
         { error: `Failed to create employee record: ${employeeError.message}` },
         { status: 400 }
       );
     }
+
 
     // Step 4: Get Employee role and assign it
     const { data: roleData, error: roleQueryError } = await supabaseAdmin
@@ -140,7 +144,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (roleQueryError) {
-      console.error('Error fetching Employee role:', roleQueryError);
+      console.error('[Create Employee] Error fetching Employee role:', roleQueryError);
       return NextResponse.json(
         { error: `Failed to find Employee role: ${roleQueryError.message}` },
         { status: 400 }
@@ -164,14 +168,13 @@ export async function POST(request: NextRequest) {
       });
 
     if (roleError) {
-      console.error('Error assigning Employee role:', roleError);
+      console.error('[Create Employee] Error assigning Employee role:', roleError);
       return NextResponse.json(
         { error: `Failed to assign Employee role: ${roleError.message}` },
         { status: 400 }
       );
     }
 
-    console.log('✅ Employee role assigned successfully to user:', userId);
 
     // Step 5: Assign company
     const { error: companyError } = await supabaseAdmin
@@ -183,7 +186,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (companyError) {
-      console.warn('Warning: Failed to assign company:', companyError.message);
+      console.warn('[Create Employee] Warning: Failed to assign company:', companyError.message);
     }
 
     // Step 6: Send welcome email (non-blocking - don't fail if email fails)
@@ -203,7 +206,6 @@ export async function POST(request: NextRequest) {
       if (emailResponse.ok) {
         const emailData = await emailResponse.json();
         emailSent = emailData.email_sent ?? false;
-        console.log(`✅ Welcome email sent to ${payload.email}`);
       } else {
         console.warn(`⚠️ Failed to send welcome email to ${payload.email}:`, emailResponse.statusText);
         emailSent = false;
@@ -214,7 +216,36 @@ export async function POST(request: NextRequest) {
       // Don't fail employee creation if email fails
     }
 
-    return NextResponse.json( 
+    // Step 7: Log audit event
+    try {
+      const ipAddress = getIpAddress(Object.fromEntries(request.headers.entries()));
+      const userAgent = getUserAgent(Object.fromEntries(request.headers.entries()));
+      
+      // Get the current user ID from the auth header
+      const authHeader = request.headers.get('Authorization');
+      const token = authHeader?.replace('Bearer ', '');
+      
+      const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+      
+      if (user) {
+        await logAuditEvent({
+          user_id: user.id,
+          company_id: payload.company_id,
+          action: 'create_employee',
+          resource_type: 'employees',
+          resource_id: employeeData.id,
+          resource_name: `${payload.first_name} ${payload.last_name}`,
+          status: 'success',
+          ip_address: ipAddress,
+          user_agent: userAgent,
+        });
+      }
+    } catch (auditError) {
+      console.warn('Failed to log audit event for employee creation:', auditError);
+      // Don't fail the request if audit logging fails
+    }
+
+    return NextResponse.json(
       {
         success: true,
         data: {
@@ -231,7 +262,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating employee:', error);
+    console.error('[Create Employee] Error creating employee:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unknown error occurred' },
       { status: 500 }

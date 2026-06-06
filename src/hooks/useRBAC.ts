@@ -8,6 +8,7 @@
 import { useCallback, useContext } from 'react';
 import { AuthContext } from '@/context/AuthContext';
 import { checkPermission, isAdmin, canAccessResource } from '@/lib/rbac';
+import { apiUrl } from '@/lib/api';
 
 export function useRBAC() {
   const context = useContext(AuthContext);
@@ -120,7 +121,7 @@ export function usePendingLeaveApprovals() {
     }
 
     try {
-      const { data, error } = await fetch('/api/leaves/approvals/pending', {
+      const { data, error } = await fetch(apiUrl('/api/leaves/approvals/pending'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

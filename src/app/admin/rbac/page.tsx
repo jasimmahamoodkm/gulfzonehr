@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { logActivity } from '@/lib/api';
 import { Role } from '@/types/rbac';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -59,29 +60,20 @@ export default function RBACManagementPage() {
 
   const loadData = async () => {
     try {
-      console.log('📊 Loading RBAC data');
-      console.log('👤 Current user:', user?.id);
-      console.log('🏢 User company_id:', user?.company_id);
-      console.log('👑 User roles:', user?.roles?.map(r => r.role_name));
 
       // Load ALL roles (for create user form we need all roles)
-      console.log('📝 Fetching all roles...');
       const { data: rolesData, error: rolesError } = await supabase
         .from('roles')
         .select('*')
         .order('name');
 
       if (rolesError) {
-        console.error('❌ Error loading roles:', rolesError);
+        console.error('Error loading roles:', rolesError);
         throw rolesError;
       }
-      console.log('✅ All roles loaded:', rolesData?.length, 'roles');
-      console.log('📋 Roles data:', rolesData);
       setRoles(rolesData || []);
 
       // Load users separately
-      console.log('📝 Fetching users...');
-      console.log('🔍 Current user is Super Admin?', user?.roles?.some(r => r.role_name === 'Super Admin'));
 
       // For super admins, load all users; for others, filter by company
       let usersQuery = supabase
@@ -89,36 +81,27 @@ export default function RBACManagementPage() {
         .select('id, email, first_name, last_name, company_id')
         .order('first_name');
 
-      // Only filter by company if user has a company_id (i.e., not a Super Admin or Super Admin with company)
-      if (user?.company_id && user?.roles?.some(r => r.role_name !== 'Super Admin')) {
-        console.log('🔒 Filtering users by company:', user.company_id);
-        usersQuery = usersQuery.eq('company_id', user.company_id);
-      } else if (user?.company_id) {
-        console.log('🔒 Super Admin filtering by company:', user.company_id);
+      // Scope users to the admin's company (Super Admins without a company see all)
+      if (user?.company_id) {
         usersQuery = usersQuery.eq('company_id', user.company_id);
       }
 
       const { data: usersData, error: usersError } = await usersQuery;
 
       if (usersError) {
-        console.error('❌ Error loading users:', usersError);
-        console.error('📋 Error details:', usersError.message);
+        console.error('Error loading users:', usersError);
+        console.error('Error details:', usersError.message);
         // Don't throw - continue even if there's an RLS error
       }
-      console.log('✅ Users loaded:', usersData?.length, 'users');
-      console.log('📋 Users data:', usersData);
 
       // Load all user_roles relationships
-      console.log('📝 Fetching user_roles relationships...');
       const { data: userRolesData, error: userRolesError } = await supabase
         .from('user_roles')
         .select('user_id, role_id, id');
 
       if (userRolesError) {
-        console.error('❌ Error loading user_roles:', userRolesError);
+        console.error('Error loading user_roles:', userRolesError);
         // Don't throw, continue without user_roles data
-      } else {
-        console.log('✅ User_roles loaded:', userRolesData?.length, 'assignments');
       }
 
       // Merge user_roles into users
@@ -127,47 +110,40 @@ export default function RBACManagementPage() {
         user_roles: (userRolesData || []).filter(ur => ur.user_id === u.id),
       }));
 
-      console.log('📋 Users with merged roles:', usersWithRoles);
       setUsers(usersWithRoles);
 
       // Load companies
-      console.log('📝 Fetching companies...');
       const { data: companiesData, error: companiesError } = await supabase
         .from('companies')
         .select('id, name')
         .order('name');
 
       if (companiesError) {
-        console.error('❌ Error loading companies:', companiesError);
+        console.error('Error loading companies:', companiesError);
       } else {
-        console.log('✅ Companies loaded:', companiesData?.length, 'companies');
         setCompanies(companiesData || []);
       }
 
       // Load modules
-      console.log('📝 Fetching modules...');
       const { data: modulesData, error: modulesError } = await supabase
         .from('modules')
         .select('*')
         .order('order_index');
 
       if (modulesError) {
-        console.error('❌ Error loading modules:', modulesError);
+        console.error('Error loading modules:', modulesError);
       } else {
-        console.log('✅ Modules loaded:', modulesData?.length, 'modules');
         setModules(modulesData || []);
       }
 
       // Load role_modules mappings
-      console.log('📝 Fetching role_modules...');
       const { data: roleModulesData, error: roleModulesError } = await supabase
         .from('role_modules')
         .select('role_id, module_id');
 
       if (roleModulesError) {
-        console.error('❌ Error loading role_modules:', roleModulesError);
+        console.error('Error loading role_modules:', roleModulesError);
       } else {
-        console.log('✅ Role_modules loaded:', roleModulesData?.length, 'mappings');
         // Create a map of role_id -> [module_ids]
         const roleModulesMap = new Map<string, string[]>();
         (roleModulesData || []).forEach(rm => {
@@ -179,7 +155,7 @@ export default function RBACManagementPage() {
         setRoleModules(roleModulesMap);
       }
     } catch (err) {
-      console.error('❌ Error loading data:', err);
+      console.error('Error loading data:', err);
     }
   };
 
@@ -193,7 +169,6 @@ export default function RBACManagementPage() {
 
       if (isAssigned) {
         // Remove module from role
-        console.log('🗑️ Removing module:', moduleId, 'from role:', roleId);
         const { error } = await supabase
           .from('role_modules')
           .delete()
@@ -201,16 +176,22 @@ export default function RBACManagementPage() {
           .eq('module_id', moduleId);
 
         if (error) {
-          console.error('❌ Error removing module:', error);
+          console.error('Error removing module:', error);
           throw error;
         }
-        console.log('✅ Module removed');
         const updatedModules = currentModules.filter(m => m !== moduleId);
         setRoleModules(new Map(roleModules).set(roleId, updatedModules));
         showNotification(`Removed ${moduleName} from role`, 'success');
+        const roleNameRm = roles.find(r => r.id === roleId)?.name || roleId;
+        await logActivity(supabase, {
+          company_id: user?.company_id ?? null,
+          action: 'remove_role_module',
+          resource_type: 'role_modules',
+          resource_id: roleId,
+          resource_name: `Module "${moduleName}" removed from role "${roleNameRm}"`,
+        });
       } else {
         // Add module to role
-        console.log('➕ Adding module:', moduleId, 'to role:', roleId);
         const { error } = await supabase
           .from('role_modules')
           .insert({
@@ -219,17 +200,24 @@ export default function RBACManagementPage() {
           });
 
         if (error) {
-          console.error('❌ Error adding module:', error);
+          console.error('Error adding module:', error);
           throw error;
         }
-        console.log('✅ Module added');
         const updatedModules = [...currentModules, moduleId];
         setRoleModules(new Map(roleModules).set(roleId, updatedModules));
         showNotification(`Added ${moduleName} to role`, 'success');
+        const roleNameAdd = roles.find(r => r.id === roleId)?.name || roleId;
+        await logActivity(supabase, {
+          company_id: user?.company_id ?? null,
+          action: 'add_role_module',
+          resource_type: 'role_modules',
+          resource_id: roleId,
+          resource_name: `Module "${moduleName}" added to role "${roleNameAdd}"`,
+        });
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      console.error('❌ Error updating module:', err);
+      console.error('Error updating module:', err);
       showNotification(`Failed to update module: ${errorMsg}`, 'error');
     }
   };
@@ -242,7 +230,6 @@ export default function RBACManagementPage() {
 
       if (isAssigned) {
         // Remove role
-        console.log('🗑️ Removing role:', roleId, 'from user:', userId);
         const { error } = await supabase
           .from('user_roles')
           .delete()
@@ -250,15 +237,20 @@ export default function RBACManagementPage() {
           .eq('role_id', roleId);
 
         if (error) {
-          console.error('❌ Error removing role:', error);
+          console.error('Error removing role:', error);
           throw error;
         }
-        console.log('✅ Role removed');
         setSelectedUserRoles(selectedUserRoles.filter(r => r !== roleId));
         showNotification(`Removed ${roleName} from user`, 'success');
+        await logActivity(supabase, {
+          company_id: user?.company_id ?? null,
+          action: 'remove_role',
+          resource_type: 'user_roles',
+          resource_id: userId,
+          resource_name: `Role "${roleName}" removed from user`,
+        });
       } else {
         // Assign role
-        console.log('➕ Assigning role:', roleId, 'to user:', userId);
         const { error } = await supabase
           .from('user_roles')
           .insert({
@@ -268,18 +260,24 @@ export default function RBACManagementPage() {
           });
 
         if (error) {
-          console.error('❌ Error assigning role:', error);
+          console.error('Error assigning role:', error);
           throw error;
         }
-        console.log('✅ Role assigned');
         setSelectedUserRoles([...selectedUserRoles, roleId]);
         showNotification(`Assigned ${roleName} to user`, 'success');
+        await logActivity(supabase, {
+          company_id: user?.company_id ?? null,
+          action: 'assign_role',
+          resource_type: 'user_roles',
+          resource_id: userId,
+          resource_name: `Role "${roleName}" assigned to user`,
+        });
       }
 
       loadData();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      console.error('❌ Error updating role:', err);
+      console.error('Error updating role:', err);
       showNotification(`Failed to update role: ${errorMsg}`, 'error');
     }
   };
@@ -299,7 +297,6 @@ export default function RBACManagementPage() {
     if (!confirmDelete) return;
 
     try {
-      console.log('🗑️ Deleting user:', userId);
 
       // Delete user roles first (due to foreign key constraint)
       const { error: rolesError } = await supabase
@@ -308,10 +305,9 @@ export default function RBACManagementPage() {
         .eq('user_id', userId);
 
       if (rolesError) {
-        console.error('❌ Error deleting user roles:', rolesError);
+        console.error('Error deleting user roles:', rolesError);
         throw rolesError;
       }
-      console.log('✅ User roles deleted');
 
       // Delete user profile
       const { error: profileError } = await supabase
@@ -320,10 +316,9 @@ export default function RBACManagementPage() {
         .eq('id', userId);
 
       if (profileError) {
-        console.error('❌ Error deleting user profile:', profileError);
+        console.error('Error deleting user profile:', profileError);
         throw profileError;
       }
-      console.log('✅ User profile deleted');
 
       // Note: Cannot delete from auth.users via client SDK for security reasons
       alert('User deleted from the system. Note: Auth account must be deleted by administrators via Supabase dashboard.');
@@ -333,7 +328,7 @@ export default function RBACManagementPage() {
       loadData();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to delete user';
-      console.error('❌ Error deleting user:', errorMsg);
+      console.error('Error deleting user:', errorMsg);
       alert(`Failed to delete user: ${errorMsg}`);
     }
   };
@@ -363,7 +358,6 @@ export default function RBACManagementPage() {
         throw new Error('Please select at least one role');
       }
 
-      console.log('👤 Creating new user:', newUser.email);
 
       // Create user in Supabase Auth
       // Note: This requires signups to be enabled OR use admin API
@@ -384,11 +378,9 @@ export default function RBACManagementPage() {
       }
       if (!authData.user) throw new Error('Failed to create auth user');
 
-      console.log('✅ Auth user created:', authData.user.id);
 
       // Create user profile in database
-      console.log('📝 Creating user profile in database...');
-      const { data: profileData, error: profileError } = await supabase
+      const { error: profileError } = await supabase
         .from('users')
         .insert({
           id: authData.user.id,
@@ -397,17 +389,14 @@ export default function RBACManagementPage() {
           last_name: newUser.last_name,
           company_id: newUser.company_id,
           role: 'Employee',
-        })
-        .select();
+        });
 
       if (profileError) {
-        console.error('❌ Error creating user profile:', profileError);
+        console.error('Error creating user profile:', profileError);
         throw new Error(`Failed to create user profile: ${profileError.message}`);
       }
-      console.log('✅ User profile created:', profileData);
 
       // Assign roles
-      console.log('📝 Assigning roles...');
       for (const roleId of newUser.role_ids) {
         const { error: roleError } = await supabase
           .from('user_roles')
@@ -419,12 +408,10 @@ export default function RBACManagementPage() {
           });
 
         if (roleError) {
-          console.error('❌ Error assigning role:', roleId, roleError);
+          console.error('Error assigning role:', roleId, roleError);
           throw new Error(`Failed to assign role: ${roleError.message}`);
         }
-        console.log('✅ Role assigned:', roleId);
       }
-      console.log('✅ All roles assigned');
 
       setCreateUserMessage('✅ User created successfully!');
       setNewUser({
@@ -443,7 +430,7 @@ export default function RBACManagementPage() {
       }, 1000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to create user';
-      console.error('❌ Error creating user:', errorMsg);
+      console.error('Error creating user:', errorMsg);
       setCreateUserMessage(`❌ Error: ${errorMsg}`);
     } finally {
       setCreatingUser(false);

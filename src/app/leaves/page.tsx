@@ -80,8 +80,7 @@ const LeavesPage: React.FC = () => {
         .single();
 
       if (empError) {
-        console.warn('⚠️ Employee record not found for email:', user.email);
-        console.log('📍 Looking for employee with email:', user.email, 'in company:', selectedCompany.id);
+        console.warn('Employee record not found for email:', user.email);
       }
 
       setEmployeeData(empData || null);
@@ -100,7 +99,7 @@ const LeavesPage: React.FC = () => {
         setLeaveRequests([]);
       }
     } catch (err) {
-      console.error('❌ Error fetching leaves:', err);
+      console.error('Error fetching leaves:', err);
       setMessage({ type: 'error', text: 'Failed to load leave information' });
     } finally {
       setLoading(false);

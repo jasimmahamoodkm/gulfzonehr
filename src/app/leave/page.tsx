@@ -12,6 +12,7 @@ import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
 import { Plus, CheckCircle, Clock, XCircle, Users } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 
 const leaveSchema = z.object({
@@ -32,6 +33,7 @@ type LeaveFormData = z.infer<typeof leaveSchema>;
 
 const LeaveManagementPage: React.FC = () => {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
@@ -39,6 +41,41 @@ const LeaveManagementPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+
+  // Determine user role
+  const isManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
+  const isAdmin = user?.roles?.some(r => ['Super Admin', 'Company Admin', 'HR Manager'].includes(r.role_name ?? '')) ?? false;
+  const isEmployee = !isAdmin && !isManager;
+
+  // Manager's own employee ID for scoping
+  const [myEmployeeId, setMyEmployeeId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!isManager || !user?.id) return;
+    supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => { if (data) setMyEmployeeId(data.id); });
+  }, [isManager, user?.id]);
+
+  // Get current employee ID if user is an employee
+  React.useEffect(() => {
+    const getEmployeeId = async () => {
+      if (isEmployee && user?.id) {
+        try {
+          const { data: empData } = await supabase
+            .from('employees')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+          if (empData) {
+            setCurrentEmployeeId(empData.id);
+          }
+        } catch (err) {
+          console.error('Error fetching employee record:', err);
+        }
+      }
+    };
+    getEmployeeId();
+  }, [isEmployee, user?.id]);
 
   const {
     register,
@@ -58,28 +95,55 @@ const LeaveManagementPage: React.FC = () => {
   const fetchLeaves = async () => {
     try {
       setLoading(true);
-      if (!selectedCompany) {
+
+      // For employees: show only their own leaves
+      if (isEmployee && currentEmployeeId) {
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('id', currentEmployeeId)
+          .single();
+
+        setEmployees(empData ? [empData] : []);
+
+        // Get leaves for this employee
+        const { data: leaveData, error } = await supabase
+          .from('leaves')
+          .select('*')
+          .eq('employee_id', currentEmployeeId)
+          .order('start_date', { ascending: false });
+
+        if (error) throw error;
+        setLeaveRequests(leaveData || []);
+      } else if (isManager && myEmployeeId) {
+        // Manager: own + assigned employees
+        const { data: empData } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('company_id', selectedCompany?.id || '')
+          .or(`id.eq.${myEmployeeId},manager_id.eq.${myEmployeeId}`);
+        setEmployees(empData || []);
+        const ids = (empData || []).map((e: any) => e.id);
+        const { data: leaveData, error } = await supabase
+          .from('leaves').select('*')
+          .in('employee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+          .order('start_date', { ascending: false });
+        if (error) throw error;
+        setLeaveRequests(leaveData || []);
+      } else if (selectedCompany) {
+        // Admin/HR: all employees' leaves
+        const { data: empData } = await supabase
+          .from('employees').select('*').eq('company_id', selectedCompany.id);
+        setEmployees(empData || []);
+        const { data: leaveData, error } = await supabase
+          .from('leaves').select('*')
+          .in('employee_id', empData?.map((e: any) => e.id) || [])
+          .order('start_date', { ascending: false });
+        if (error) throw error;
+        setLeaveRequests(leaveData || []);
+      } else {
         setLeaveRequests([]);
-        return;
       }
-
-      // Get employees
-      const { data: empData } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('company_id', selectedCompany.id);
-
-      setEmployees(empData || []);
-
-      // Get leaves
-      const { data: leaveData, error } = await supabase
-        .from('leaves')
-        .select('*')
-        .in('employee_id', empData?.map((e) => e.id) || [])
-        .order('start_date', { ascending: false });
-
-      if (error) throw error;
-      setLeaveRequests(leaveData || []);
     } catch (err) {
       console.error('Error fetching leaves:', err);
       setMessage({ type: 'error', text: 'Failed to load leave requests' });
@@ -90,7 +154,7 @@ const LeaveManagementPage: React.FC = () => {
 
   React.useEffect(() => {
     fetchLeaves();
-  }, [selectedCompany]);
+  }, [selectedCompany, currentEmployeeId, isEmployee, isManager, myEmployeeId]);
 
   const onSubmit = async (data: LeaveFormData) => {
     try {
@@ -193,15 +257,25 @@ const LeaveManagementPage: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Leave Management</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {isEmployee ? 'My Leave' : 'Leave Management'}
+            </h1>
             <p className="text-gray-600 mt-1">
-              {selectedCompany ? `Manage leave requests at ${selectedCompany.name}` : 'Select a company to manage leave'}
+              {isEmployee
+                ? 'Submit and view your leave requests'
+                : selectedCompany ? `Manage leave requests at ${selectedCompany.name}` : 'Select a company to manage leave'}
             </p>
           </div>
           <Button
             variant="primary"
-            onClick={() => setShowModal(true)}
-            disabled={!selectedCompany}
+            onClick={() => {
+              setShowModal(true);
+              // Auto-select employee for employees
+              if (isEmployee && currentEmployeeId) {
+                setValue('employee_id', currentEmployeeId);
+              }
+            }}
+            disabled={!selectedCompany && !isEmployee}
             className="gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={20} />
@@ -209,13 +283,13 @@ const LeaveManagementPage: React.FC = () => {
           </Button>
         </div>
 
-        {!selectedCompany && (
+        {!selectedCompany && !isEmployee && (
           <Card className="bg-blue-50 border border-blue-200">
             <p className="text-blue-700 text-center py-4">Please select a company from the header to manage leave requests</p>
           </Card>
         )}
 
-        {selectedCompany && (
+        {(selectedCompany || isEmployee) && (
           <>
         {/* Loading State */}
         {loading && (
@@ -330,7 +404,10 @@ const LeaveManagementPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Employee</label>
             <select
               {...register('employee_id')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isEmployee}
+              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                isEmployee ? 'bg-gray-100 cursor-not-allowed' : ''
+              }`}
             >
               <option value="">Select Employee</option>
               {employees.map((emp) => (
@@ -339,6 +416,9 @@ const LeaveManagementPage: React.FC = () => {
                 </option>
               ))}
             </select>
+            {isEmployee && (
+              <p className="mt-1 text-sm text-gray-600">Your leave request will be submitted under your name</p>
+            )}
             {errors.employee_id && (
               <p className="mt-1 text-sm text-red-600">{errors.employee_id.message}</p>
             )}
