@@ -78,7 +78,11 @@
       "Bash(rm -f PASSWORD_CHANGE_FIX.md PASSWORD_CHANGE_FIX_v2.md)",
       "Bash(npx eslint *)",
       "mcp__02014205-d1e3-4805-8237-552cce494442__get_advisors",
-      "Bash(python3 -c \"print\\(open\\('/tmp/split_policies.sql'\\).read\\(\\)\\)\")"
+      "Bash(python3 -c \"print\\(open\\('/tmp/split_policies.sql'\\).read\\(\\)\\)\")",
+      "Bash(pip install *)",
+      "Bash(python3 -m pip install --quiet pypdf)",
+      "Bash(which pdftoppm *)",
+      "Bash(pdftoppm -png -r 90 -f 1 -l 1 deploy/windows/GulfZoneHR_Windows_Deployment_Guide.pdf /tmp/guide_p1)"
     ]
   }
 }
