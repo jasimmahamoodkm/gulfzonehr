@@ -3,13 +3,16 @@ const nextConfig = {
   reactStrictMode: true,
   basePath: '/HRportal',
 
-  // Redirect root of the app to dashboard
+  // Redirect the true server root (outside the basePath) into the app.
+  // `basePath: false` is required so this rule matches the literal "/" rather
+  // than being auto-prefixed to "/HRportal/". Without it, http://host:3000/
+  // returns 404 because the app is mounted entirely under /HRportal.
   async redirects() {
     return [
       {
-        // Redirect /HRportal/ → /HRportal/dashboard
         source: '/',
-        destination: '/dashboard',
+        destination: '/HRportal/dashboard',
+        basePath: false,
         permanent: false,
       },
     ];
