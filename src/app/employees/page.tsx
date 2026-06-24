@@ -15,7 +15,7 @@ import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2, UserCheck
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { apiUrl, logActivity } from '@/lib/api';
+import { apiUrl } from '@/lib/api';
 
 // Schema for Add Employee (auto-creation API)
 const createEmployeeSchema = z.object({
@@ -411,47 +411,35 @@ const EmployeesPage: React.FC = () => {
     if (!gradeTarget) return;
     try {
       setSavingGrade(true);
-      const { error } = await supabase
-        .from('employees')
-        .update({ grade_id: selectedGradeId || null })
-        .eq('id', gradeTarget.id);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (error) throw error;
+      // Change the grade via the API route — it updates the grade, records the
+      // change in employee_change_history, and writes the audit log server-side.
+      const res = await fetch(apiUrl(`/api/employees/${gradeTarget.id}/change-grade`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ grade_id: selectedGradeId || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update grade');
 
       // Auto-init leave balances for the newly assigned grade
-      if (selectedGradeId && selectedCompany) {
+      if (selectedGradeId && selectedCompany && token) {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.access_token) {
-            await fetch(apiUrl('/api/admin/employees/init-leave-balance'), {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                employee_id: gradeTarget.id,
-                grade_id: selectedGradeId,
-                company_id: selectedCompany.id,
-              }),
-            });
-          }
+          await fetch(apiUrl('/api/admin/employees/init-leave-balance'), {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              employee_id: gradeTarget.id,
+              grade_id: selectedGradeId,
+              company_id: selectedCompany.id,
+            }),
+          });
         } catch {
           // Non-blocking — don't fail the grade save if leave init fails
         }
       }
-
-      // Audit log
-      const gradeName = grades.find(g => g.id === selectedGradeId)?.name;
-      await logActivity(supabase, {
-        company_id: selectedCompany?.id ?? null,
-        action: selectedGradeId ? 'assign_grade' : 'unassign_grade',
-        resource_type: 'employees',
-        resource_id: gradeTarget.id,
-        resource_name: selectedGradeId
-          ? `Grade "${gradeName ?? selectedGradeId}" assigned to ${gradeTarget.name}`
-          : `Grade removed from ${gradeTarget.name}`,
-      });
 
       setMessage({ type: 'success', text: `Grade updated for ${gradeTarget.name}` });
       setTimeout(() => setMessage(null), 3000);
