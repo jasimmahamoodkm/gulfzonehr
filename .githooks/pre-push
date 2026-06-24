@@ -1,0 +1,44 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# pre-push:
+#   1. ALWAYS run the Supabase guard (never let the client DB be the target).
+#   2. If the push updates main/master, run FULL verification
+#      (type-check + production build). A failure blocks the push.
+#
+# This enforces: "nothing reaches main until the final version is tested."
+# ---------------------------------------------------------------------------
+
+# 1) Client-database guard — applies to every push.
+node scripts/guard-supabase.js || {
+  echo "❌ Supabase guard failed. Push aborted."
+  exit 1
+}
+
+protected_main="refs/heads/main refs/heads/master"
+blocked=0
+
+# stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
+while read local_ref local_sha remote_ref remote_sha; do
+  case " $protected_main " in
+    *" $remote_ref "*)
+      echo ""
+      echo "🔒 Push to '${remote_ref#refs/heads/}' detected — verifying before it lands."
+      echo "   Running type-check..."
+      if ! npm run --silent type-check; then
+        echo "❌ type-check failed — push to main blocked."
+        blocked=1
+        break
+      fi
+      echo "   Running production build..."
+      if ! npm run --silent build; then
+        echo "❌ build failed — push to main blocked."
+        blocked=1
+        break
+      fi
+      echo "✅ Verification passed — allowing push to '${remote_ref#refs/heads/}'."
+      ;;
+  esac
+done
+
+[ "$blocked" = "1" ] && exit 1
+exit 0

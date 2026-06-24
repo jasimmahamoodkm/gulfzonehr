@@ -4,11 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "guard": "node scripts/guard-supabase.js",
+    "predev": "node scripts/guard-supabase.js",
     "dev": "next dev",
+    "prebuild": "node scripts/guard-supabase.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "verify": "node scripts/guard-supabase.js && tsc --noEmit && next build",
+    "setup-hooks": "git config core.hooksPath .githooks"
   },
   "keywords": [
     "HR",

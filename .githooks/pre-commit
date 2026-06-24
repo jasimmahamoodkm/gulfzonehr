@@ -1,0 +1,30 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# pre-commit: block DIRECT authoring commits on main/master.
+#
+# main must only ever receive *merges* of already-tested code (from develop /
+# a feature branch). Direct edits committed straight onto main are rejected.
+# Merge commits are allowed (that is how the final, tested version lands).
+# ---------------------------------------------------------------------------
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Allow merges — a merge in progress is the sanctioned way tested code reaches main.
+if [ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
+  exit 0
+fi
+
+case "$branch" in
+  main|master)
+    echo ""
+    echo "⛔  Direct commits to '$branch' are not allowed."
+    echo ""
+    echo "    main only receives MERGES of tested code. Do your work on a branch:"
+    echo "        git checkout develop            # or: git checkout -b feature/<name>"
+    echo "        ...commit there, test, then merge into main when final."
+    echo ""
+    exit 1
+    ;;
+esac
+
+exit 0
