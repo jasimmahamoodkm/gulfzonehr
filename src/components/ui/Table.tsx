@@ -12,6 +12,7 @@ interface TableProps {
   data: any[];
   loading?: boolean;
   emptyMessage?: string;
+  onRowClick?: (row: any) => void;
 }
 
 const Table: React.FC<TableProps> = ({
@@ -19,6 +20,7 @@ const Table: React.FC<TableProps> = ({
   data,
   loading = false,
   emptyMessage = 'No data available',
+  onRowClick,
 }) => {
   if (loading) {
     return (
@@ -53,7 +55,11 @@ const Table: React.FC<TableProps> = ({
             </tr>
           ) : (
             data.map((row, idx) => (
-              <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+              <tr
+                key={idx}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+              >
                 {columns.map((column) => (
                   <td key={column.key} className="px-6 py-4 text-sm text-gray-700">
                     {column.render ? column.render(row[column.key], row) : row[column.key]}

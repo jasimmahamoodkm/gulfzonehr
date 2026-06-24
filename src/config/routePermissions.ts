@@ -111,6 +111,13 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     requiresAuth: true,
     requiresCompany: true,
   },
+  {
+    path: '/employees/[id]',
+    requiredRoles: ['Super Admin', 'Company Admin', 'HR Manager', 'Manager'],
+    description: 'Employee Details',
+    requiresAuth: true,
+    requiresCompany: true,
+  },
 
   // Company Management
   {
