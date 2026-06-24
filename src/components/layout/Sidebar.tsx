@@ -155,8 +155,10 @@ const Sidebar: React.FC = () => {
       <aside
         className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 fixed md:relative left-0 top-0 h-screen md:h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 overflow-y-auto transition-transform duration-300 z-30 md:z-0 pt-20 md:pt-0`}
+        } md:translate-x-0 fixed md:relative left-0 top-0 h-screen md:h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 z-30 md:z-0 pt-20 md:pt-0`}
       >
+        {/* Scrollable nav area — grows to fill space, leaving the footer pinned */}
+        <div className="flex-1 overflow-y-auto">
         {/* Company Indicator */}
         {selectedCompany && (
           <div className="px-4 py-3 m-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -197,9 +199,9 @@ const Sidebar: React.FC = () => {
             </div>
           </div>
         )}
-
-        {/* Bottom Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50 space-y-2">
+        </div>
+        {/* Bottom Section — pinned to the bottom via flex (mt-auto), never overlaps the menu */}
+        <div className="mt-auto p-4 border-t border-gray-200 bg-gray-50 space-y-2">
           <Link
             href="/settings"
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors text-left"
