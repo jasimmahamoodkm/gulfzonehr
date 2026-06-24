@@ -688,7 +688,7 @@ const EmployeesPage: React.FC = () => {
       key: 'actions',
       label: 'Actions',
       render: (_: any, row: any) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
           {!canManageEmployees ? (
             <span className="text-xs text-gray-400 italic">View only</span>
           ) : (
@@ -884,7 +884,7 @@ const EmployeesPage: React.FC = () => {
               No employees found
             </div>
           ) : (
-            <Table columns={columns} data={filteredEmployees} />
+            <Table columns={columns} data={filteredEmployees} onRowClick={(row) => router.push(`/employees/${row.id}`)} />
           )}
         </Card>
 
