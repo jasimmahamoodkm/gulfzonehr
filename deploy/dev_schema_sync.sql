@@ -2,9 +2,9 @@
 -- GulfZone HR — DEV / fresh-environment SCHEMA SYNC (no data)
 -- ============================================================================
 -- Brings a DEV or fresh Supabase project's SCHEMA fully in line with the
--- current codebase: all tables, columns, constraints, indexes, functions,
--- RLS policies, views, and the storage bucket. Contains NO business data.
--- Idempotent: safe to run repeatedly. Run this on the DEV project's SQL editor.
+-- current codebase: tables, MISSING COLUMNS on existing tables, constraints,
+-- indexes, functions, RLS, views, and the storage bucket. NO business data.
+-- Idempotent: safe to run repeatedly. Run on the DEV project's SQL editor.
 -- ============================================================================
 
 -- ============================================================================
@@ -362,6 +362,265 @@ CREATE TABLE IF NOT EXISTS public.audit_log_policies (
   created_at timestamp without time zone DEFAULT now(),
   updated_at timestamp without time zone DEFAULT now()
 );
+
+
+-- ----------------------------------------------------------------------------
+-- 1b. COLUMN RECONCILIATION
+--     Adds any columns missing from pre-existing (older) tables. Columns are
+--     added NULLABLE so this never fails on tables that already have rows.
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS name character varying;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS email character varying;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS phone character varying;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS address text;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS city character varying;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS country character varying;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS industry character varying;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS founded_year integer;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS employee_count integer DEFAULT 0;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email character varying;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS first_name character varying;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_name character varying;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS role character varying DEFAULT 'employee'::character varying;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_temporary_password boolean DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS name character varying;
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS is_system boolean DEFAULT false;
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.roles ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS name character varying;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS icon character varying;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS path character varying;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS order_index integer;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS is_system boolean DEFAULT true;
+ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();
+ALTER TABLE public.role_permissions ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.role_permissions ADD COLUMN IF NOT EXISTS role_id uuid;
+ALTER TABLE public.role_permissions ADD COLUMN IF NOT EXISTS resource character varying;
+ALTER TABLE public.role_permissions ADD COLUMN IF NOT EXISTS action character varying;
+ALTER TABLE public.role_permissions ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.role_modules ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.role_modules ADD COLUMN IF NOT EXISTS role_id uuid;
+ALTER TABLE public.role_modules ADD COLUMN IF NOT EXISTS module_id uuid;
+ALTER TABLE public.role_modules ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS role_id uuid;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS assigned_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS assigned_by uuid;
+ALTER TABLE public.user_companies ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.user_companies ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.user_companies ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.user_companies ADD COLUMN IF NOT EXISTS is_primary boolean DEFAULT false;
+ALTER TABLE public.user_companies ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.user_companies ADD COLUMN IF NOT EXISTS assigned_at timestamp without time zone;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS name character varying;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS base_salary numeric(12,2);
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS level integer DEFAULT 1;
+ALTER TABLE public.employee_grades ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS name character varying;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS days_allocated integer;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS is_paid boolean DEFAULT true;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS requires_approval boolean DEFAULT true;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS days_per_year integer DEFAULT 0;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS allow_half_day boolean DEFAULT false;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS color character varying(7) DEFAULT '#3B82F6'::character varying;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
+ALTER TABLE public.leave_types ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS first_name character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS last_name character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS email character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS phone character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS "position" character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS department character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS date_of_joining date;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS date_of_birth date;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS address text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS city character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS country character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS salary numeric(12,2);
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS employment_type character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS status character varying DEFAULT 'active'::character varying;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS grade_id uuid;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS manager_id uuid;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS grade_id uuid;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS salary_component character varying;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS amount numeric(12,2);
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS is_deduction boolean DEFAULT false;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS salary numeric(12,2);
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS currency character varying(3) DEFAULT 'AED'::character varying;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS effective_from date DEFAULT CURRENT_DATE;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS effective_to date;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE public.grade_salary_config ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS grade_id uuid;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS benefit_type character varying;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS benefit_value numeric(12,2);
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS value_type character varying DEFAULT 'fixed'::character varying;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS currency character varying DEFAULT 'AED'::character varying;
+ALTER TABLE public.grade_benefits ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS grade_id uuid;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS leave_type_id uuid;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS days_allocated integer;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS days_per_year integer;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS carry_forward_days integer DEFAULT 0;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS carry_forward_expiry_months integer DEFAULT 3;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS year integer;
+ALTER TABLE public.grade_leave_config ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS date date;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS check_in time without time zone;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS check_out time without time zone;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS status character varying;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS leave_type character varying;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS start_date date;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS end_date date;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS days integer;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS reason text;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS status character varying DEFAULT 'pending'::character varying;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS requested_by uuid;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS approved_by uuid;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS approval_date timestamp without time zone;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS manager_comments text;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS approval_status character varying;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS rejection_reason text;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS is_comp_off boolean DEFAULT false;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS comp_off_request_id uuid;
+ALTER TABLE public.leaves ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS approver_id uuid;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS leave_type character varying;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS approval_level integer DEFAULT 1;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
+ALTER TABLE public.leave_approvers ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS leave_type_id uuid;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS year integer;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS days_allocated integer;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS days_used integer DEFAULT 0;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS days_remaining integer;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS total_days integer;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS used_days integer;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS pending_days integer DEFAULT 0;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS remaining_days integer;
+ALTER TABLE public.employee_leave_balance ADD COLUMN IF NOT EXISTS last_updated timestamp without time zone DEFAULT now();
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS month character varying;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS salary numeric(12,2);
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS bonus numeric(12,2) DEFAULT 0;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS deductions numeric(12,2) DEFAULT 0;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS net_pay numeric(12,2);
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS status character varying DEFAULT 'draft'::character varying;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS leave_deduction_days numeric DEFAULT 0;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS leave_deduction_amount numeric DEFAULT 0;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS payroll_id uuid;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS leave_type character varying;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS days_deducted integer;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS amount_deducted numeric(12,2);
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS year integer;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS total_deducted_days numeric DEFAULT 0;
+ALTER TABLE public.employee_leave_deduction_tracking ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS employee_id uuid;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS document_type character varying;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS document_number character varying;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS issue_date date;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS expiry_date date;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS issuing_authority character varying;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS file_url character varying;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS action character varying;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS entity_type character varying DEFAULT ''::character varying;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS entity_id uuid;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS changes jsonb;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS ip_address character varying;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS user_agent text;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS resource_type character varying;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS resource_id uuid;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS resource_name character varying;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS old_values jsonb;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS new_values jsonb;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS status character varying DEFAULT 'success'::character varying;
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS error_message text;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS activity_type character varying;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS metadata jsonb;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE public.activity_logs ADD COLUMN IF NOT EXISTS ip_address character varying;
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS id uuid DEFAULT uuid_generate_v4();
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS company_id uuid;
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS resource_type character varying;
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS retention_days integer DEFAULT 90;
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS archive_enabled boolean DEFAULT false;
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS created_at timestamp without time zone DEFAULT now();
+ALTER TABLE public.audit_log_policies ADD COLUMN IF NOT EXISTS updated_at timestamp without time zone DEFAULT now();
 
 -- ----------------------------------------------------------------------------
 -- 2. PRIMARY KEYS
@@ -915,10 +1174,9 @@ CREATE POLICY documents_storage_delete ON storage.objects FOR DELETE TO authenti
 -- ----------------------------------------------------------------------------
 
 -- ----------------------------------------------------------------------------
--- LATEST MIGRATIONS (newer than the base schema snapshot)
+-- LATEST MIGRATIONS (newer than the base snapshot)
 -- ----------------------------------------------------------------------------
 
--- 022: employees.manager_id
 -- Migration 022: add employees.manager_id (reporting manager)
 -- This column backs the "Assign Manager" feature and the manager-scoped data
 -- views. It was originally applied directly to the production project, so this
@@ -938,7 +1196,6 @@ CREATE INDEX IF NOT EXISTS idx_employees_manager_id
   ON public.employees (manager_id);
 
 
--- 021: employee_change_history
 -- Migration 021: Employee grade & salary change history
 -- Records every grade or salary change per employee so the timeline can be
 -- reconstructed (feeds the Employee Journey widget). Forward-only, idempotent.
