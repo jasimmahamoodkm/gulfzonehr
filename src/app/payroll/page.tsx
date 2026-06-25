@@ -60,6 +60,8 @@ interface BenefitLine {
   computed_amount: number;
   included: boolean;
   reason_excluded?: string;
+  is_annual?: boolean;            // annual benefit, paid once per year on demand
+  already_paid_month?: string | null; // 'YYYY-MM' if already paid this year
 }
 
 interface BatchResult {
@@ -188,29 +190,40 @@ const PayrollPage: React.FC = () => {
           .order('benefit_type');
 
         const month = selectedMonth;
-        const june = month.endsWith('-06');
-        const january = month.endsWith('-01');
+        const myYear = parseInt(month.split('-')[0]);
+        // Annual benefits already paid this year (so we can show "paid in X")
+        const { data: paid } = await supabase
+          .from('annual_benefit_payments')
+          .select('benefit_type, paid_month')
+          .eq('employee_id', currentEmployeeId)
+          .eq('year', myYear);
+        const paidByType: Record<string, string> = {};
+        (paid || []).forEach((p: any) => { paidByType[p.benefit_type] = p.paid_month; });
 
         const lines: BenefitLine[] = (bData || []).map((b: any) => {
-          const isAnnualTicket = b.benefit_type === 'Annual Flight Ticket';
-          const isAnnualBonus  = b.benefit_type === 'Annual Bonus';
-          const included = (!isAnnualTicket || june) && (!isAnnualBonus || january);
+          const isAnnual = /annual/i.test(b.benefit_type);
+          const paidMonth = paidByType[b.benefit_type] || null;
           const raw = b.benefit_value ?? 0;
           const computed = b.value_type === 'percentage'
             ? Math.round((raw / 100) * salary * 100) / 100
             : raw;
+          // Monthly benefits count toward this month's package; annual benefits
+          // only when paid this very month.
+          const included = !isAnnual || paidMonth === month;
           return {
             id: b.id,
             benefit_type: b.benefit_type,
             benefit_value: raw,
             value_type: b.value_type,
             currency: b.currency || 'AED',
-            computed_amount: included ? computed : 0,
+            computed_amount: computed,
             included,
-            reason_excluded: !included
-              ? isAnnualTicket ? 'Paid in June only'
-              : isAnnualBonus  ? 'Paid in January only'
-              : undefined
+            is_annual: isAnnual,
+            already_paid_month: paidMonth,
+            reason_excluded: isAnnual
+              ? (paidMonth
+                  ? `Paid in ${new Date(paidMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}`
+                  : 'Annual — paid once per year')
               : undefined,
           };
         });
@@ -233,8 +246,6 @@ const PayrollPage: React.FC = () => {
   const [batchDone, setBatchDone] = useState(false);
 
   // Derived values
-  const isJune = (month: string) => month.endsWith('-06');
-  const isJanuary = (month: string) => month.endsWith('-01');
 
   const totalAllowances = benefitLines
     .filter(b => b.included)
@@ -512,23 +523,31 @@ const PayrollPage: React.FC = () => {
 
       if (bErr) throw bErr;
 
-      const june = isJune(month);
+      // Which annual benefits has this employee already been paid this year?
+      const benefitYear = parseInt(month.split('-')[0]);
+      const { data: annualPaid } = await supabase
+        .from('annual_benefit_payments')
+        .select('benefit_type, paid_month')
+        .eq('employee_id', employeeId)
+        .eq('year', benefitYear);
+      const paidByType: Record<string, string> = {};
+      (annualPaid || []).forEach((p: any) => { paidByType[p.benefit_type] = p.paid_month; });
 
       const lines: BenefitLine[] = (benefitsData || []).map((b: any) => {
-        const isAnnualTicket = b.benefit_type === 'Annual Flight Ticket';
-        const isAnnualBonus  = b.benefit_type === 'Annual Bonus';
-        const included =
-          (!isAnnualTicket || june) &&
-          (!isAnnualBonus  || isJanuary(month));
+        // Any benefit whose type contains "Annual" is paid once per year, on demand.
+        const isAnnual = /annual/i.test(b.benefit_type);
+        const paidMonth = paidByType[b.benefit_type] || null;
         const raw = b.benefit_value ?? 0;
         const computed = b.value_type === 'percentage'
           ? Math.round((raw / 100) * salary * 100) / 100
           : raw;
 
-        const reason_excluded = !included
-          ? isAnnualTicket ? 'Annual Flight Ticket is only paid in June'
-          : isAnnualBonus  ? 'Annual Bonus is only paid in January'
-          : undefined
+        // Monthly benefits are always included. Annual benefits are NOT auto-
+        // included — the admin opts in via a checkbox — and are blocked once
+        // already paid for the year.
+        const included = !isAnnual;
+        const reason_excluded = isAnnual && paidMonth
+          ? `Already paid in ${new Date(paidMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}`
           : undefined;
 
         return {
@@ -537,17 +556,20 @@ const PayrollPage: React.FC = () => {
           benefit_value: raw,
           value_type: b.value_type,
           currency: b.currency || 'AED',
-          computed_amount: included ? computed : 0,
+          computed_amount: computed,   // always the real value; `included` controls the total
           included,
           reason_excluded,
+          is_annual: isAnnual,
+          already_paid_month: paidMonth,
         };
       });
 
       setBenefitLines(lines);
 
-      // Monthly allowances = regular benefits (not annual ticket / annual bonus)
+      // Monthly allowances = regular (non-annual) benefits only — used for the
+      // leave-deduction daily-wage calc (annual one-off benefits don't count).
       const monthlyAllowances = lines
-        .filter(l => l.included && l.benefit_type !== 'Annual Flight Ticket' && l.benefit_type !== 'Annual Bonus')
+        .filter(l => l.included && !l.is_annual)
         .reduce((s, l) => s + l.computed_amount, 0);
 
       // Fetch leave balances (year-to-date) and month-specific leaves in parallel
@@ -598,14 +620,11 @@ const PayrollPage: React.FC = () => {
       .eq('grade_id', emp.grade_id)
       .eq('active', true);
 
-    const june = isJune(month);
-    const jan  = isJanuary(month);
-
+    // Batch "process all" includes only regular monthly benefits. Annual
+    // benefits (air ticket, bonus) are paid once a year and are opted in
+    // deliberately per-employee via Process Single — never auto-paid in batch.
     const allowances = (benefitsData || []).reduce((sum: number, b: any) => {
-      const isTicket = b.benefit_type === 'Annual Flight Ticket';
-      const isBonus  = b.benefit_type === 'Annual Bonus';
-      if (isTicket && !june) return sum;
-      if (isBonus  && !jan)  return sum;
+      if (/annual/i.test(b.benefit_type)) return sum;
       const raw = b.benefit_value ?? 0;
       const amount = b.value_type === 'percentage'
         ? Math.round((raw / 100) * salary * 100) / 100
@@ -781,6 +800,23 @@ const PayrollPage: React.FC = () => {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to process payroll');
 
+      // Record any annual benefits (e.g. air ticket) included this month so they
+      // are blocked for the rest of the year. UNIQUE constraint prevents dupes.
+      const annualIncluded = benefitLines.filter(b => b.is_annual && b.included && !b.already_paid_month);
+      if (annualIncluded.length > 0) {
+        const year = parseInt(selectedPayrollMonth.split('-')[0]);
+        const rows = annualIncluded.map(b => ({
+          employee_id: selectedEmployeeId,
+          company_id: selectedCompany?.id ?? null,
+          benefit_type: b.benefit_type,
+          year,
+          paid_month: selectedPayrollMonth,
+          amount: b.computed_amount,
+          payroll_id: json?.data?.id ?? null,
+        }));
+        await supabase.from('annual_benefit_payments').insert(rows);
+      }
+
       setMessage({ type: 'success', text: 'Payroll processed successfully' });
       closeModal();
       fetchPayroll();
@@ -850,13 +886,21 @@ const PayrollPage: React.FC = () => {
         .eq('active', true)
         .order('benefit_type');
 
-      const june = isJune(record.month);
-      const jan  = isJanuary(record.month);
+      // Annual benefits appear on the payslip only for the month they were paid.
+      const payslipYear = parseInt((record.month || '').split('-')[0]);
+      const { data: paidRows } = await supabase
+        .from('annual_benefit_payments')
+        .select('benefit_type, paid_month')
+        .eq('employee_id', record.employee_id)
+        .eq('year', payslipYear);
+      const paidByType: Record<string, string> = {};
+      (paidRows || []).forEach((p: any) => { paidByType[p.benefit_type] = p.paid_month; });
 
       const lines: BenefitLine[] = (benefitsData || []).map((b: any) => {
-        const isTicket = b.benefit_type === 'Annual Flight Ticket';
-        const isBonus  = b.benefit_type === 'Annual Bonus';
-        const included = (!isTicket || june) && (!isBonus || jan);
+        const isAnnual = /annual/i.test(b.benefit_type);
+        const paidMonth = paidByType[b.benefit_type] || null;
+        // Monthly benefits always show; annual benefits only in the paid month.
+        const included = !isAnnual || paidMonth === record.month;
         const raw = b.benefit_value ?? 0;
         const computed = b.value_type === 'percentage'
           ? Math.round((raw / 100) * baseSalary * 100) / 100
@@ -865,9 +909,8 @@ const PayrollPage: React.FC = () => {
           id: b.id, benefit_type: b.benefit_type,
           benefit_value: raw, value_type: b.value_type, currency: b.currency || 'AED',
           computed_amount: included ? computed : 0, included,
-          reason_excluded: !included
-            ? (isTicket ? 'Only in June' : isBonus ? 'Only in January' : undefined)
-            : undefined,
+          is_annual: isAnnual, already_paid_month: paidMonth,
+          reason_excluded: isAnnual && !included ? 'Annual — not paid this month' : undefined,
         };
       });
       setPayslipLines(lines);
@@ -1354,16 +1397,9 @@ ${payslipLeaveBalances.length > 0 ? `
               <Calendar size={14} /> Payroll Month *
             </label>
             <MonthSelect value={selectedPayrollMonth} onChange={setSelectedPayrollMonth} className="w-full" />
-            {isJune(selectedPayrollMonth) && (
-              <p className="mt-1.5 text-xs text-blue-600 flex items-center gap-1">
-                <Plane size={12} /> June — Annual Flight Ticket will be included
-              </p>
-            )}
-            {isJanuary(selectedPayrollMonth) && (
-              <p className="mt-1.5 text-xs text-green-600 flex items-center gap-1">
-                <Info size={12} /> January — Annual Bonus will be included
-              </p>
-            )}
+            <p className="mt-1.5 text-xs text-gray-500 flex items-center gap-1">
+              <Plane size={12} /> Annual benefits (e.g. air ticket) can be ticked in the breakdown below to pay once this year.
+            </p>
           </div>
 
           {/* Benefits Breakdown */}
@@ -1382,25 +1418,41 @@ ${payslipLeaveBalances.length > 0 ? `
                 </div>
 
                 {/* Benefit lines */}
-                {benefitLines.map(b => (
-                  <div key={b.id} className={`px-4 py-3 flex items-center justify-between ${!b.included ? 'opacity-40' : ''}`}>
+                {benefitLines.map(b => {
+                  const annualSelectable = b.is_annual && !b.already_paid_month;
+                  const dim = !b.included && !annualSelectable;
+                  return (
+                  <div key={b.id} className={`px-4 py-3 flex items-center justify-between ${dim ? 'opacity-40' : ''}`}>
                     <div className="flex items-center gap-2">
-                      {b.benefit_type === 'Annual Flight Ticket' && <Plane size={13} className="text-blue-500" />}
+                      {annualSelectable && (
+                        <input
+                          type="checkbox"
+                          checked={b.included}
+                          onChange={(e) => setBenefitLines(prev => prev.map(x => x.id === b.id ? { ...x, included: e.target.checked } : x))}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          title="Include this annual benefit in this month's payroll"
+                        />
+                      )}
+                      {b.is_annual && <Plane size={13} className="text-blue-500" />}
                       <span className="text-sm text-gray-700">{b.benefit_type}</span>
-                      <span className="text-xs text-gray-400">
-                        ({b.value_type === 'percentage' ? `${b.benefit_value}% of basic` : b.benefit_type})
-                      </span>
-                      {!b.included && b.reason_excluded && (
-                        <span className="text-xs text-orange-500 flex items-center gap-1">
-                          <Info size={11} /> {b.reason_excluded}
+                      {b.is_annual && (
+                        <span className="text-[10px] uppercase tracking-wide bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">Annual</span>
+                      )}
+                      {b.already_paid_month && b.reason_excluded && (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle size={11} /> {b.reason_excluded}
                         </span>
                       )}
+                      {annualSelectable && !b.included && (
+                        <span className="text-xs text-gray-400">— tick to pay this month (once per year)</span>
+                      )}
                     </div>
-                    <span className={`text-sm font-medium ${b.included ? 'text-green-700' : 'text-gray-400 line-through'}`}>
+                    <span className={`text-sm font-medium ${b.included ? 'text-green-700' : 'text-gray-400'}`}>
                       + {fmt(b.value_type === 'percentage' ? Math.round((b.benefit_value / 100) * basicSalary * 100) / 100 : b.benefit_value)}
                     </span>
                   </div>
-                ))}
+                  );
+                })}
 
                 {benefitLines.length === 0 && !loadingBenefits && selectedEmployeeId && !modalError && (
                   <div className="px-4 py-3 text-sm text-gray-400 italic">No benefits configured for this grade</div>
@@ -1422,7 +1474,7 @@ ${payslipLeaveBalances.length > 0 ? `
                       <span className="text-xs text-red-600 ml-2">({leaveDeductionDays} day{leaveDeductionDays !== 1 ? 's' : ''} over quota × daily wage)</span>
                     </div>
                     <span className="text-sm font-semibold text-red-700">
-                      - {fmt(Math.round(leaveDeductionDays * ((basicSalary + benefitLines.filter(b => b.included && b.benefit_type !== 'Annual Flight Ticket' && b.benefit_type !== 'Annual Bonus').reduce((s,b) => s + b.computed_amount, 0)) / 30) * 100) / 100)}
+                      - {fmt(Math.round(leaveDeductionDays * ((basicSalary + benefitLines.filter(b => b.included && !b.is_annual).reduce((s,b) => s + b.computed_amount, 0)) / 30) * 100) / 100)}
                     </span>
                   </div>
                 )}
@@ -1434,7 +1486,7 @@ ${payslipLeaveBalances.length > 0 ? `
                       <span className="text-xs text-orange-600 ml-2">({leaveDeductionUnauthorized} day{leaveDeductionUnauthorized !== 1 ? 's' : ''} pending/unapproved × daily wage)</span>
                     </div>
                     <span className="text-sm font-semibold text-orange-700">
-                      - {fmt(Math.round(leaveDeductionUnauthorized * ((basicSalary + benefitLines.filter(b => b.included && b.benefit_type !== 'Annual Flight Ticket' && b.benefit_type !== 'Annual Bonus').reduce((s,b) => s + b.computed_amount, 0)) / 30) * 100) / 100)}
+                      - {fmt(Math.round(leaveDeductionUnauthorized * ((basicSalary + benefitLines.filter(b => b.included && !b.is_annual).reduce((s,b) => s + b.computed_amount, 0)) / 30) * 100) / 100)}
                     </span>
                   </div>
                 )}
@@ -1731,16 +1783,9 @@ ${payslipLeaveBalances.length > 0 ? `
                   <Calendar size={14} /> Payroll Month *
                 </label>
                 <MonthSelect value={batchMonth} onChange={setBatchMonth} />
-                {isJune(batchMonth) && (
-                  <p className="mt-1.5 text-xs text-blue-600 flex items-center gap-1">
-                    <Plane size={12} /> June — Annual Flight Ticket will be included
-                  </p>
-                )}
-                {isJanuary(batchMonth) && (
-                  <p className="mt-1.5 text-xs text-green-600 flex items-center gap-1">
-                    <Info size={12} /> January — Annual Bonus will be included
-                  </p>
-                )}
+                <p className="mt-1.5 text-xs text-gray-500 flex items-center gap-1">
+                  <Info size={12} /> Batch pays monthly benefits only. Annual benefits (air ticket) are paid per-employee via Process Single.
+                </p>
               </div>
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
