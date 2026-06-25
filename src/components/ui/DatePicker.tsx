@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format, parse } from 'date-fns';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
-import 'react-day-picker/dist/style.css';
+import 'react-day-picker/style.css';
 
 interface DatePickerProps {
   value: string;
@@ -54,30 +54,27 @@ const DatePicker: React.FC<DatePickerProps> = ({
     }
   };
 
-  const selectedDate = value ? parse(value, 'yyyy-MM-dd', new Date()) : new Date(selectedYear, selectedMonth, 1);
+  // Only highlight a day when there is an actual value — otherwise the picker
+  // pre-selects the 1st of the month, and clicking it (deselect) feels like a
+  // dead first click.
+  const selectedDate = value ? parse(value, 'yyyy-MM-dd', new Date()) : undefined;
 
-  // Calculate dropdown position when opening
-  useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const dropdownHeight = 450; // Approximate height of dropdown
-      const viewportHeight = window.innerHeight;
+  // Position the dropdown BEFORE it paints (computing in an effect after open
+  // makes it flash at the top-left corner first, then jump into place).
+  const positionDropdown = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const dropdownHeight = 450; // Approximate height of dropdown
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow > dropdownHeight ? rect.bottom + 8 : rect.top - dropdownHeight - 8;
+    setDropdownPos({ top: Math.max(8, top), left: rect.left });
+  };
 
-      // Check if dropdown would go below viewport
-      const spaceBelow = viewportHeight - rect.bottom;
-      const positionBelow = spaceBelow > dropdownHeight;
-
-      // Position above if not enough space below
-      const top = positionBelow
-        ? rect.bottom + 8
-        : rect.top - dropdownHeight - 8;
-
-      setDropdownPos({
-        top: Math.max(8, top), // Ensure minimum top position
-        left: rect.left,
-      });
-    }
-  }, [isOpen]);
+  const toggleOpen = () => {
+    if (disabled) return;
+    if (!isOpen) { positionDropdown(); setIsOpen(true); }
+    else setIsOpen(false);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -105,7 +102,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
     <div className="relative" ref={containerRef}>
       <button
         type="button"
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={toggleOpen}
         disabled={disabled}
         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left disabled:bg-gray-50 disabled:cursor-not-allowed"
       >
@@ -126,58 +123,35 @@ const DatePicker: React.FC<DatePickerProps> = ({
           }}
         >
           <style>{`
-            .rdp {
-              --rdp-cell-size: 36px;
+            .rdp-root {
               --rdp-accent-color: #3b82f6;
-              --rdp-background-color: #dbeafe;
+              --rdp-accent-background-color: #dbeafe;
+              --rdp-day-width: 36px;
+              --rdp-day-height: 36px;
+              --rdp-today-color: #3b82f6;
               margin: 0;
             }
-            .rdp-months {
-              justify-content: center;
-            }
-            .rdp-head_cell {
+            .rdp-months { justify-content: center; }
+            .rdp-weekday {
               font-weight: 600;
               color: #374151;
               text-transform: uppercase;
               font-size: 0.75rem;
             }
-            .rdp-cell {
-              padding: 0;
-            }
-            .rdp-day {
-              border-radius: 0.375rem;
-              font-size: 0.875rem;
-            }
-            .rdp-day_selected:not([disabled]) {
+            .rdp-day_button { border-radius: 0.375rem; font-size: 0.875rem; }
+            .rdp-selected .rdp-day_button {
               background-color: #3b82f6;
-              color: white;
+              color: #fff;
               font-weight: 600;
+              border: none;
             }
-            .rdp-day_today:not([disabled]) {
-              font-weight: 700;
-              color: #3b82f6;
-            }
-            .rdp-day_disabled {
-              color: #d1d5db;
-            }
-            .rdp-caption {
-              padding: 0.5rem 0;
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
+            .rdp-today:not(.rdp-outside) .rdp-day_button { font-weight: 700; color: #3b82f6; }
+            .rdp-disabled { opacity: 0.4; }
+            .rdp-month_caption {
               font-weight: 600;
               color: #111827;
-              margin-bottom: 1rem;
-            }
-            .rdp-caption_label {
               font-size: 0.875rem;
-            }
-            .rdp-button_reset {
-              padding: 0.25rem;
-              border-radius: 0.375rem;
-            }
-            .rdp-button_reset:hover:not([disabled]) {
-              background-color: #f3f4f6;
+              padding: 0.25rem 0 0.75rem;
             }
           `}</style>
 
@@ -241,6 +215,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
           <DayPicker
             mode="single"
+            required
             selected={selectedDate}
             onSelect={handleDateSelect}
             month={new Date(selectedYear, selectedMonth)}

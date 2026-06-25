@@ -197,6 +197,15 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     requiresCompany: true,
   },
 
+  // Admin Routes - Promotion / Demotion Approvals
+  {
+    path: '/admin/grade-approvals',
+    requiredRoles: ['Super Admin', 'Company Admin', 'HR Manager'],
+    description: 'Promotion / Demotion Approval Workflow',
+    requiresAuth: true,
+    requiresCompany: true,
+  },
+
   // Admin Routes - Audit Logs
   {
     path: '/admin/audit-logs',

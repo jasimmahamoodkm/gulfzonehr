@@ -11,11 +11,12 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2, UserCheck } from 'lucide-react';
+import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2, UserCheck, TrendingUp } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
+import PromotionRequestModal from '@/components/employees/PromotionRequestModal';
 
 // Schema for Add Employee (auto-creation API)
 const createEmployeeSchema = z.object({
@@ -96,6 +97,20 @@ const EmployeesPage: React.FC = () => {
   const [gradeTarget, setGradeTarget] = useState<{ id: string; name: string; currentGradeId: string | null } | null>(null);
   const [selectedGradeId, setSelectedGradeId] = useState<string>('');
   const [savingGrade, setSavingGrade] = useState(false);
+
+  // Promotion / demotion request modal
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
+  const [promotionTarget, setPromotionTarget] = useState<{ id: string; name: string; currentGradeId: string | null; currentSalary: number | null } | null>(null);
+  const openPromotionModal = (employee: any) => {
+    const gradeSalary = grades.find((g) => g.id === employee.grade_id)?.salary ?? null;
+    setPromotionTarget({
+      id: employee.id,
+      name: `${employee.first_name} ${employee.last_name}`,
+      currentGradeId: employee.grade_id ?? null,
+      currentSalary: gradeSalary,
+    });
+    setShowPromotionModal(true);
+  };
 
   // Edit Employee state
   const [showEditModal, setShowEditModal] = useState(false);
@@ -714,6 +729,15 @@ const EmployeesPage: React.FC = () => {
               title="Assign Manager"
             >
               <UserCheck size={18} className="text-teal-600" />
+            </button>
+          )}
+          {isAdminOrHR && (
+            <button
+              onClick={() => openPromotionModal(row)}
+              className="p-1 hover:bg-gray-200 rounded transition"
+              title="Request Promotion / Demotion"
+            >
+              <TrendingUp size={18} className="text-green-600" />
             </button>
           )}
           <button
@@ -1465,6 +1489,17 @@ const EmployeesPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Promotion / Demotion request modal */}
+      <PromotionRequestModal
+        isOpen={showPromotionModal}
+        onClose={() => { setShowPromotionModal(false); setPromotionTarget(null); }}
+        employee={promotionTarget ? { id: promotionTarget.id, name: promotionTarget.name } : null}
+        currentGradeId={promotionTarget?.currentGradeId ?? null}
+        currentSalary={promotionTarget?.currentSalary ?? null}
+        grades={grades}
+        onSubmitted={(msg) => setMessage({ type: 'success', text: msg })}
+      />
     </Layout>
   );
 };

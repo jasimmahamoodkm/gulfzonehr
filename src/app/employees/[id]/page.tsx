@@ -6,11 +6,14 @@ import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import { ArrowLeft, Mail, Phone, Briefcase, Calendar, Award, UserCheck, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getEffectiveSalary } from '@/lib/compensation';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ChangeRow {
   id: string;
-  change_type: 'grade' | 'salary';
+  change_type: 'grade' | 'salary' | 'benefits';
+  old_grade_id: string | null;
+  new_grade_id: string | null;
   old_salary: number | null;
   new_salary: number | null;
   currency: string;
@@ -55,8 +58,10 @@ function buildSalarySeries(joinDate: string | null, currentSalary: number | null
   return series;
 }
 
+interface ChangePoint { month: string; label: string }
+
 /** Self-contained SVG step-line chart for the salary journey. */
-function JourneyChart({ series, changes }: { series: { month: string; salary: number | null }[]; changes: ChangeRow[] }) {
+function JourneyChart({ series, changePoints }: { series: { month: string; salary: number | null }[]; changePoints: ChangePoint[] }) {
   const W = 720, H = 260, PADL = 56, PADR = 20, PADT = 20, PADB = 36;
   const pts = series.filter(s => s.salary != null) as { month: string; salary: number }[];
   if (pts.length === 0) {
@@ -82,8 +87,13 @@ function JourneyChart({ series, changes }: { series: { month: string; salary: nu
     lastY = py;
   });
 
-  // change markers
-  const changeMonths = new Set(changes.filter(c => c.effective_month).map(c => c.effective_month!));
+  // Group change descriptions by effective month (a month may hold several).
+  const byMonth = new Map<string, string[]>();
+  changePoints.forEach(cp => {
+    if (!cp.month) return;
+    if (!byMonth.has(cp.month)) byMonth.set(cp.month, []);
+    byMonth.get(cp.month)!.push(cp.label);
+  });
   const gridY = [0, 0.25, 0.5, 0.75, 1].map(f => yMin + f * (yMax - yMin));
   // X tick every ~Nth month to avoid crowding
   const tickEvery = Math.ceil(series.length / 8) || 1;
@@ -105,21 +115,30 @@ function JourneyChart({ series, changes }: { series: { month: string; salary: nu
           {monthLabel(s.month)}
         </text>
       ) : null))}
-      {/* area + line */}
+      {/* salary line */}
       <path d={d} fill="none" stroke="#2563EB" strokeWidth="2.5" />
-      {/* change markers */}
-      {series.map((s, i) => (s.salary != null && changeMonths.has(s.month) ? (
-        <g key={'m' + i}>
-          <circle cx={x(i)} cy={y(s.salary)} r="5" fill="#0D9488" stroke="white" strokeWidth="2" />
-        </g>
-      ) : null))}
-      {/* endpoint */}
+      {/* endpoint (drawn before change markers so markers sit on top) */}
       {(() => {
         const last = [...series].reverse().find(s => s.salary != null);
         if (!last) return null;
         const i = series.findIndex(s => s.month === last.month);
-        return <circle cx={x(i)} cy={y(last.salary!)} r="4" fill="#2563EB" />;
+        return <circle cx={x(i)} cy={y(last.salary!)} r="3.5" fill="#2563EB" />;
       })()}
+      {/* change guides + markers (grade / salary / benefits) with hover detail */}
+      {Array.from(byMonth.entries()).map(([month, labels]) => {
+        const i = series.findIndex(s => s.month === month);
+        if (i < 0) return null;
+        const s = series[i];
+        if (s.salary == null) return null;
+        const px = x(i), py = y(s.salary);
+        return (
+          <g key={'cp' + month}>
+            <title>{`${monthLabel(month)}\n${labels.join('\n')}`}</title>
+            <line x1={px} y1={PADT} x2={px} y2={H - PADB} stroke="#0D9488" strokeWidth="1" strokeDasharray="3 3" opacity="0.55" />
+            <circle cx={px} cy={py} r="6" fill="white" stroke="#0D9488" strokeWidth="2.5" />
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -139,6 +158,7 @@ export default function EmployeeDetailPage() {
   const [currentSalary, setCurrentSalary] = useState<number | null>(null);
   const [currency, setCurrency] = useState('AED');
   const [history, setHistory] = useState<ChangeRow[]>([]);
+  const [gradeNames, setGradeNames] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -154,25 +174,50 @@ export default function EmployeeDetailPage() {
       const mgr = (e as any)?.manager;
       setManagerName(mgr ? `${mgr.first_name} ${mgr.last_name}` : '—');
 
+      // Effective salary: per-employee override (set by an approved promotion /
+      // salary change) is preferred over the grade's configured salary.
+      let ccy = 'AED';
       if (e?.grade_id) {
         const today = new Date().toISOString().split('T')[0];
         const { data: sal } = await supabase
           .from('grade_salary_config')
-          .select('salary, currency')
+          .select('currency')
           .eq('grade_id', e.grade_id)
           .lte('effective_from', today)
           .order('effective_from', { ascending: false })
           .limit(1);
-        setCurrentSalary(sal?.[0]?.salary ?? null);
-        setCurrency(sal?.[0]?.currency ?? 'AED');
+        ccy = sal?.[0]?.currency ?? 'AED';
       }
+      setCurrency(ccy);
+      const effSalary = await getEffectiveSalary(supabase, {
+        salaryOverride: (e as any)?.salary_override ?? null,
+        gradeId: e?.grade_id ?? null,
+      });
+      setCurrentSalary(effSalary || null);
 
       const { data: h } = await supabase
         .from('employee_change_history')
-        .select('id, change_type, old_salary, new_salary, currency, effective_month, note, changed_at')
+        .select('id, change_type, old_grade_id, new_grade_id, old_salary, new_salary, currency, effective_month, note, changed_at')
         .eq('employee_id', id)
         .order('changed_at', { ascending: true });
-      setHistory((h as ChangeRow[]) || []);
+      const rows = (h as ChangeRow[]) || [];
+      setHistory(rows);
+
+      // Resolve grade names for any grade ids referenced by the history (so the
+      // From/To columns can show grade transitions, not just salary).
+      const gradeIds = Array.from(new Set(
+        rows.flatMap(r => [r.old_grade_id, r.new_grade_id]).filter(Boolean) as string[]
+      ));
+      if (e?.grade_id) gradeIds.push(e.grade_id);
+      if (gradeIds.length) {
+        const { data: gn } = await supabase
+          .from('employee_grades')
+          .select('id, name')
+          .in('id', Array.from(new Set(gradeIds)));
+        const map: Record<string, string> = {};
+        (gn || []).forEach((g: any) => { map[g.id] = g.name; });
+        setGradeNames(map);
+      }
     } finally {
       setLoading(false);
     }
@@ -182,6 +227,33 @@ export default function EmployeeDetailPage() {
 
   const fmt = (n: number | null) => (n == null ? '—' : `${currency} ${n.toLocaleString()}`);
   const series = buildSalarySeries(emp?.date_of_joining ?? null, currentSalary, history);
+
+  // What the From / To columns show, per change type.
+  const money = (n: number | null, ccy: string) => (n == null ? null : `${ccy || currency} ${n.toLocaleString()}`);
+  const fromTo = (h: ChangeRow): { from: string; to: string } => {
+    if (h.change_type === 'grade') {
+      const g = (gid: string | null, sal: number | null) => {
+        const name = gid ? (gradeNames[gid] || 'Grade') : '—';
+        const m = money(sal, h.currency);
+        return m ? `${name} (${m})` : name;
+      };
+      return { from: g(h.old_grade_id, h.old_salary), to: g(h.new_grade_id, h.new_salary) };
+    }
+    if (h.change_type === 'salary') {
+      return { from: money(h.old_salary, h.currency) || '—', to: money(h.new_salary, h.currency) || '—' };
+    }
+    return { from: '—', to: h.note || 'Benefits updated' };
+  };
+
+  // Labelled points for the journey chart (grade / salary / benefits).
+  const changeLabel = (h: ChangeRow): string => {
+    if (h.change_type === 'benefits') return `Benefits — ${h.note || 'updated'}`;
+    const ft = fromTo(h);
+    return `${h.change_type === 'grade' ? 'Grade' : 'Salary'}: ${ft.from} → ${ft.to}`;
+  };
+  const changePoints = history
+    .filter(h => h.effective_month)
+    .map(h => ({ month: h.effective_month as string, label: changeLabel(h) }));
 
   if (loading) {
     return <Layout><div className="flex items-center justify-center py-20">
@@ -235,8 +307,8 @@ export default function EmployeeDetailPage() {
             <TrendingUp size={18} className="text-blue-600" />
             <h2 className="text-lg font-semibold text-gray-900">Employee Journey</h2>
           </div>
-          <p className="text-sm text-gray-500 mb-4">Salary from joining date to date — markers show grade/salary changes.</p>
-          <JourneyChart series={series} changes={history} />
+          <p className="text-sm text-gray-500 mb-4">Salary from joining date to date — teal markers flag grade, salary &amp; benefit changes (hover for detail).</p>
+          <JourneyChart series={series} changePoints={changePoints} />
         </Card>
 
         {/* Change history table */}
@@ -257,15 +329,24 @@ export default function EmployeeDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {[...history].reverse().map(h => (
+                {[...history].reverse().map(h => {
+                  const ft = fromTo(h);
+                  return (
                   <tr key={h.id}>
                     <td className="px-6 py-2 text-gray-700">{new Date(h.changed_at).toLocaleDateString()}</td>
                     <td className="px-6 py-2"><span className="capitalize">{h.change_type}</span></td>
-                    <td className="px-6 py-2 text-right text-gray-600">{h.old_salary == null ? '—' : `${h.currency} ${h.old_salary.toLocaleString()}`}</td>
-                    <td className="px-6 py-2 text-right font-medium text-gray-900">{h.new_salary == null ? '—' : `${h.currency} ${h.new_salary.toLocaleString()}`}</td>
+                    {h.change_type === 'benefits' ? (
+                      <td className="px-6 py-2 text-gray-700" colSpan={2}>{h.note || 'Benefits updated'}</td>
+                    ) : (
+                      <>
+                        <td className="px-6 py-2 text-right text-gray-600">{ft.from}</td>
+                        <td className="px-6 py-2 text-right font-medium text-gray-900">{ft.to}</td>
+                      </>
+                    )}
                     <td className="px-6 py-2 text-gray-600">{h.effective_month ? monthLabel(h.effective_month) : '—'}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

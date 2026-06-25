@@ -17,6 +17,7 @@ import {
   Shield,
   CheckCircle,
   GraduationCap,
+  TrendingUp,
   Building2,
   Clock,
   Calendar,
@@ -60,6 +61,7 @@ const ADMIN_MENU_ITEMS = [
   { href: '/admin/rbac', label: 'RBAC Management', icon: Lock, requiredRole: 'Company Admin', requiresCompany: false },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: Shield, requiredRole: 'Company Admin', requiresCompany: false },
   { href: '/admin/leave-approvals', label: 'Leave Approvals', icon: CheckCircle, requiredRole: 'HR Manager', requiresCompany: true },
+  { href: '/admin/grade-approvals', label: 'Promotion Approvals', icon: TrendingUp, requiredRole: 'HR Manager', requiresCompany: true },
   { href: '/admin/grades', label: 'Grade Configuration', icon: GraduationCap, requiredRole: 'HR Manager', requiresCompany: true },
 ];
 

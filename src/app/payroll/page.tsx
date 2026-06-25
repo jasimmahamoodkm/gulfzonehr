@@ -39,6 +39,7 @@ const MonthSelect: React.FC<{ value: string; onChange: (v: string) => void; clas
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { getEffectiveSalary, getMergedBenefits } from '@/lib/compensation';
 import { apiUrl } from '@/lib/api';
 
 interface Employee {
@@ -49,6 +50,7 @@ interface Employee {
   department?: string;
   employment_type?: string;
   grade_id: string | null;
+  salary_override?: number | null;
 }
 
 interface BenefitLine {
@@ -164,30 +166,17 @@ const PayrollPage: React.FC = () => {
       try {
         const { data: empData } = await supabase
           .from('employees')
-          .select('grade_id')
+          .select('grade_id, salary_override')
           .eq('id', currentEmployeeId)
           .single();
         if (!empData?.grade_id) return;
 
-        // Salary
-        const today = new Date().toISOString().split('T')[0];
-        const { data: salData } = await supabase
-          .from('grade_salary_config')
-          .select('salary')
-          .eq('grade_id', empData.grade_id)
-          .lte('effective_from', today)
-          .order('effective_from', { ascending: false })
-          .limit(1);
-        const salary = salData?.[0]?.salary ?? 0;
+        // Salary (per-employee override preferred over grade default)
+        const salary = await getEffectiveSalary(supabase, { salaryOverride: empData.salary_override, gradeId: empData.grade_id });
         setMyBasicSalary(salary);
 
-        // Benefits
-        const { data: bData } = await supabase
-          .from('grade_benefits')
-          .select('id,benefit_type,benefit_value,value_type,currency,active')
-          .eq('grade_id', empData.grade_id)
-          .eq('active', true)
-          .order('benefit_type');
+        // Benefits (grade benefits + per-employee overrides)
+        const bData = await getMergedBenefits(supabase, currentEmployeeId, empData.grade_id);
 
         const month = selectedMonth;
         const myYear = parseInt(month.split('-')[0]);
@@ -263,7 +252,7 @@ const PayrollPage: React.FC = () => {
       if (isEmployee && currentEmployeeId) {
         const { data: empData } = await supabase
           .from('employees')
-          .select('id,first_name,last_name,position,department,employment_type,grade_id')
+          .select('id,first_name,last_name,position,department,employment_type,grade_id,salary_override')
           .eq('id', currentEmployeeId)
           .single();
         setEmployees(empData ? [empData] : []);
@@ -281,7 +270,7 @@ const PayrollPage: React.FC = () => {
         // For admin: show all employees' payroll
         const { data: empData } = await supabase
           .from('employees')
-          .select('id,first_name,last_name,position,department,employment_type,grade_id')
+          .select('id,first_name,last_name,position,department,employment_type,grade_id,salary_override')
           .eq('company_id', selectedCompany.id)
           .eq('status', 'Active');
         setEmployees(empData || []);
@@ -500,28 +489,12 @@ const PayrollPage: React.FC = () => {
         return;
       }
 
-      // Fetch grade salary
-      const today = new Date().toISOString().split('T')[0];
-      const { data: salaryData } = await supabase
-        .from('grade_salary_config')
-        .select('salary, currency')
-        .eq('grade_id', emp.grade_id)
-        .lte('effective_from', today)
-        .order('effective_from', { ascending: false })
-        .limit(1);
-
-      const salary = salaryData?.[0]?.salary ?? 0;
+      // Effective salary (per-employee override preferred over grade default)
+      const salary = await getEffectiveSalary(supabase, { salaryOverride: emp.salary_override, gradeId: emp.grade_id });
       setBasicSalary(salary);
 
-      // Fetch grade benefits
-      const { data: benefitsData, error: bErr } = await supabase
-        .from('grade_benefits')
-        .select('id,benefit_type,benefit_value,value_type,currency,active')
-        .eq('grade_id', emp.grade_id)
-        .eq('active', true)
-        .order('benefit_type');
-
-      if (bErr) throw bErr;
+      // Benefits (grade benefits + per-employee overrides)
+      const benefitsData = await getMergedBenefits(supabase, employeeId, emp.grade_id);
 
       // Which annual benefits has this employee already been paid this year?
       const benefitYear = parseInt(month.split('-')[0]);
@@ -602,23 +575,9 @@ const PayrollPage: React.FC = () => {
   ): Promise<{ basicSalary: number; allowances: number; leaveDeductionDays: number; leaveDeductionAmount: number; netPay: number } | null> => {
     if (!emp.grade_id) return null;
 
-    const today = new Date().toISOString().split('T')[0];
-
-    const { data: salaryData } = await supabase
-      .from('grade_salary_config')
-      .select('salary')
-      .eq('grade_id', emp.grade_id)
-      .lte('effective_from', today)
-      .order('effective_from', { ascending: false })
-      .limit(1);
-
-    const salary = salaryData?.[0]?.salary ?? 0;
-
-    const { data: benefitsData } = await supabase
-      .from('grade_benefits')
-      .select('benefit_type, benefit_value, value_type, active')
-      .eq('grade_id', emp.grade_id)
-      .eq('active', true);
+    // Effective salary + benefits (per-employee overrides preferred)
+    const salary = await getEffectiveSalary(supabase, { salaryOverride: emp.salary_override, gradeId: emp.grade_id });
+    const benefitsData = await getMergedBenefits(supabase, emp.id, emp.grade_id);
 
     // Batch "process all" includes only regular monthly benefits. Annual
     // benefits (air ticket, bonus) are paid once a year and are opted in
@@ -868,23 +827,12 @@ const PayrollPage: React.FC = () => {
       const emp = employees.find(e => e.id === record.employee_id);
       if (!emp?.grade_id) { setLoadingPayslip(false); return; }
 
-      const today = new Date().toISOString().split('T')[0];
-      const { data: salaryData } = await supabase
-        .from('grade_salary_config')
-        .select('salary, currency')
-        .eq('grade_id', emp.grade_id)
-        .lte('effective_from', today)
-        .order('effective_from', { ascending: false })
-        .limit(1);
+      // Effective salary (override → grade → stored payroll salary)
+      const effSalary = await getEffectiveSalary(supabase, { salaryOverride: emp.salary_override, gradeId: emp.grade_id });
+      const baseSalary = effSalary || record.salary || 0;
 
-      const baseSalary = salaryData?.[0]?.salary ?? record.salary ?? 0;
-
-      const { data: benefitsData } = await supabase
-        .from('grade_benefits')
-        .select('id,benefit_type,benefit_value,value_type,currency,active')
-        .eq('grade_id', emp.grade_id)
-        .eq('active', true)
-        .order('benefit_type');
+      // Benefits (grade benefits + per-employee overrides)
+      const benefitsData = await getMergedBenefits(supabase, record.employee_id, emp.grade_id);
 
       // Annual benefits appear on the payslip only for the month they were paid.
       const payslipYear = parseInt((record.month || '').split('-')[0]);
