@@ -44,46 +44,60 @@ const DashboardPage: React.FC = () => {
         const today = new Date().toISOString().split('T')[0];
         const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
-        // Employees (scoped to the selected company)
+        // Phase 1 — employees + companies (independent, fetched in parallel)
         let empQuery = supabase
           .from('employees')
           .select('id,date_of_joining,company_id,first_name,last_name,department,position,status,archived_at');
         if (companyId) empQuery = empQuery.eq('company_id', companyId);
-        const { data: employees, error: empError } = await empQuery;
+        const [
+          { data: employees, error: empError },
+          { data: companies, error: compError },
+        ] = await Promise.all([
+          empQuery,
+          supabase.from('companies').select('id,name'),
+        ]);
         if (empError) throw empError;
+        if (compError) throw compError;
         const emps = employees || [];
         const companyEmpIds = emps.map((e: any) => e.id);
         const empIdFilter = companyEmpIds.length ? companyEmpIds : ['00000000-0000-0000-0000-000000000000'];
         const nameById = new Map<string, string>(emps.map((e: any) => [e.id, `${e.first_name} ${e.last_name}`]));
 
-        // Companies (visible to this user)
-        const { data: companies, error: compError } = await supabase.from('companies').select('id,name');
-        if (compError) throw compError;
-
-        // On leave today (attendance, scoped)
+        // Phase 2 — attendance, doc expiries and upcoming leaves (all independent
+        // once employee ids are known — fetched in parallel)
         let attQuery = supabase
           .from('attendance').select('id')
           .eq('date', today).eq('status', 'On Leave');
         if (companyId) attQuery = attQuery.in('employee_id', empIdFilter);
-        const { data: todayAttendance, error: attError } = await attQuery;
-        if (attError) throw attError;
 
-        // Documents expiring within 30 days (scoped)
         let docQuery = supabase
           .from('documents')
           .select('id,document_type,expiry_date,employee_id')
           .gte('expiry_date', today).lte('expiry_date', in30)
           .order('expiry_date', { ascending: true });
         if (companyId) docQuery = docQuery.eq('company_id', companyId);
-        const { data: expiringDocs } = await docQuery;
 
-        // Documents already expired (scoped)
         let expiredQuery = supabase
           .from('documents')
           .select('id', { count: 'exact', head: true })
           .lt('expiry_date', today);
         if (companyId) expiredQuery = expiredQuery.eq('company_id', companyId);
-        const { count: expiredCount } = await expiredQuery;
+
+        let leaveQuery = supabase
+          .from('leaves')
+          .select('employee_id,leave_type,start_date,approval_status,status')
+          .gte('start_date', today).lte('start_date', in30)
+          .order('start_date', { ascending: true })
+          .limit(5);
+        if (companyId) leaveQuery = leaveQuery.in('employee_id', empIdFilter);
+
+        const [
+          { data: todayAttendance, error: attError },
+          { data: expiringDocs },
+          { count: expiredCount },
+          { data: upcomingLeaves },
+        ] = await Promise.all([attQuery, docQuery, expiredQuery, leaveQuery]);
+        if (attError) throw attError;
 
         setStats([
           { label: 'Total Employees', value: emps.length, icon: Users, color: 'bg-blue-100 text-blue-600', href: '/employees' },
@@ -122,15 +136,6 @@ const DashboardPage: React.FC = () => {
         setDeptHeadcount(Object.entries(deptMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count));
 
         // Upcoming: approved/pending leaves starting soon + document expiries (next 30 days)
-        let leaveQuery = supabase
-          .from('leaves')
-          .select('employee_id,leave_type,start_date,approval_status,status')
-          .gte('start_date', today).lte('start_date', in30)
-          .order('start_date', { ascending: true })
-          .limit(5);
-        if (companyId) leaveQuery = leaveQuery.in('employee_id', empIdFilter);
-        const { data: upcomingLeaves } = await leaveQuery;
-
         const items: UpcomingItem[] = [
           ...(upcomingLeaves || []).map((l: any) => ({
             label: `${nameById.get(l.employee_id) || 'Employee'} — ${l.leave_type || 'Leave'}`,

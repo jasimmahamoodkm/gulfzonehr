@@ -8,7 +8,6 @@ import Modal from '@/components/ui/Modal';
 import { Download, BarChart3, FileSpreadsheet } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
-import Papa from 'papaparse';
 
 interface ReportResult { id: string; title: string; columns: string[]; rows: Record<string, any>[] }
 interface Ctx {
@@ -223,8 +222,10 @@ const ReportsPage: React.FC = () => {
     }
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     if (!result) return;
+    // Loaded on demand so the CSV library stays out of the initial page bundle.
+    const Papa = (await import('papaparse')).default;
     const csv = Papa.unparse(result.rows, { columns: result.columns });
     const stamp = new Date().toISOString().split('T')[0];
     const filename = `${result.title.replace(/\s+/g, '_')}_${selectedCompany?.name?.replace(/\s+/g, '_') || 'report'}_${stamp}.csv`;

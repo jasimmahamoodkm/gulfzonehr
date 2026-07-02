@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Company } from '@/types';
 import { supabase } from '@/lib/supabase';
 
@@ -130,10 +130,15 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSelectedCompanyState(company);
   }, []);
 
+  // Memoize the context value so consumers only re-render when the company
+  // state actually changes, not on every provider render.
+  const value = useMemo(
+    () => ({ selectedCompany, setSelectedCompany: handleSetSelectedCompany, companies, loading }),
+    [selectedCompany, handleSetSelectedCompany, companies, loading]
+  );
+
   return (
-    <CompanyContext.Provider
-      value={{ selectedCompany, setSelectedCompany: handleSetSelectedCompany, companies, loading }}
-    >
+    <CompanyContext.Provider value={value}>
       {children}
     </CompanyContext.Provider>
   );

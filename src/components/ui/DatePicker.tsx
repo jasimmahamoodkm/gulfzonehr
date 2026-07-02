@@ -6,6 +6,10 @@ import { format, parse } from 'date-fns';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import 'react-day-picker/style.css';
 
+// Year options for the selector — module-level so the 100-element array isn't
+// rebuilt on every render of every open picker.
+const YEAR_OPTIONS = Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - 50 + i);
+
 interface DatePickerProps {
   value: string;
   onChange: (date: string) => void;
@@ -173,7 +177,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
                   className="flex-1 px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 >
-                  {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - 50 + i).map((year) => (
+                  {YEAR_OPTIONS.map((year) => (
                     <option key={year} value={year}>
                       {year}
                     </option>

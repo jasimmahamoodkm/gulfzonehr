@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, UserPermission } from '@/types/index';
 import { AuthContextType, LoginPayload, SignupPayload, AuthError } from '@/types/auth';
@@ -13,7 +13,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [permissionsCache, setPermissionsCache] = useState<Map<string, boolean>>(new Map());
+  // Permission-check cache. A ref (not state): hasPermission is called during
+  // render, and caching via setState re-rendered the whole provider tree on
+  // every cache miss. A ref caches with zero re-renders.
+  const permissionsCache = useRef<Map<string, boolean>>(new Map());
   const [userCompanies, setUserCompanies] = useState<Array<{ company_id: string; company_name: string; is_primary: boolean; assigned_at: string }>>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
@@ -96,7 +99,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       // Clear cache for new permissions
-      setPermissionsCache(new Map());
+      permissionsCache.current = new Map();
 
       return { roles, permissions };
     } catch (err) {
@@ -193,7 +196,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } else {
         setUser(null);
-        setPermissionsCache(new Map());
+        permissionsCache.current = new Map();
         setUserCompanies([]);
         setSelectedCompanyId(null);
       }
@@ -214,8 +217,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const cacheKey = `${resource}:${action}`;
 
     // Check cache first
-    if (permissionsCache.has(cacheKey)) {
-      return { allowed: permissionsCache.get(cacheKey)! };
+    if (permissionsCache.current.has(cacheKey)) {
+      return { allowed: permissionsCache.current.get(cacheKey)! };
     }
 
     // Check permissions
@@ -224,7 +227,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
 
     // Update cache
-    setPermissionsCache(prev => new Map(prev).set(cacheKey, hasAccess));
+    permissionsCache.current.set(cacheKey, hasAccess);
 
     return {
       allowed: hasAccess,
@@ -329,7 +332,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
       setUser(null);
-      setPermissionsCache(new Map());
+      permissionsCache.current = new Map();
       setUserCompanies([]);
       setSelectedCompanyId(null);
     } catch (err) {

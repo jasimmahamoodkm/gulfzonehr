@@ -294,29 +294,39 @@ export default function EmployeeDetailPage() {
       const mgr = (e as any)?.manager;
       setManagerName(mgr ? `${mgr.first_name} ${mgr.last_name}` : '—');
 
-      // Effective salary: per-employee override (set by an approved promotion /
-      // salary change) is preferred over the grade's configured salary.
-      let ccy = 'AED';
-      if (e?.grade_id) {
-        const today = new Date().toISOString().split('T')[0];
-        const { data: sal } = await supabase
-          .from('grade_salary_config')
-          .select('currency')
-          .eq('grade_id', e.grade_id)
-          .lte('effective_from', today)
-          .order('effective_from', { ascending: false })
-          .limit(1);
-        ccy = sal?.[0]?.currency ?? 'AED';
-      }
-      setCurrency(ccy);
-      const effSalary = await getEffectiveSalary(supabase, {
-        salaryOverride: (e as any)?.salary_override ?? null,
-        gradeId: e?.grade_id ?? null,
-      });
+      const today = new Date().toISOString().split('T')[0];
+
+      // Wave 1 — everything that only needs the employee row, in parallel:
+      // currency, effective salary (override-aware), merged benefits, change
+      // history, the company's grade list and the company employee list.
+      const [currencyRes, effSalary, mergedBenefits, historyRes, gradesRes, empsRes] = await Promise.all([
+        e?.grade_id
+          ? supabase.from('grade_salary_config').select('currency')
+              .eq('grade_id', e.grade_id).lte('effective_from', today)
+              .order('effective_from', { ascending: false }).limit(1)
+          : Promise.resolve({ data: null } as any),
+        getEffectiveSalary(supabase, {
+          salaryOverride: (e as any)?.salary_override ?? null,
+          gradeId: e?.grade_id ?? null,
+        }),
+        e?.grade_id ? getMergedBenefits(supabase, id, e.grade_id) : Promise.resolve([]),
+        supabase.from('employee_change_history')
+          .select('id, change_type, old_grade_id, new_grade_id, old_salary, new_salary, currency, effective_month, note, changed_at')
+          .eq('employee_id', id)
+          .order('changed_at', { ascending: true }),
+        e?.company_id
+          ? supabase.from('employee_grades').select('id, name, level')
+              .eq('company_id', e.company_id).eq('active', true).order('level')
+          : Promise.resolve({ data: [] } as any),
+        e?.company_id
+          ? supabase.from('employees').select('id, user_id, first_name, last_name').eq('company_id', e.company_id)
+          : Promise.resolve({ data: [] } as any),
+      ]);
+
+      setCurrency(currencyRes.data?.[0]?.currency ?? 'AED');
       setCurrentSalary(effSalary || null);
 
       // Effective total package = basic + merged monthly (non-annual) benefits.
-      const mergedBenefits = e?.grade_id ? await getMergedBenefits(supabase, id, e.grade_id) : [];
       const monthlyBenefits = mergedBenefits
         .filter(b => !/annual/i.test(b.benefit_type))
         .reduce((sum, b) => sum + (b.value_type === 'percentage'
@@ -324,80 +334,64 @@ export default function EmployeeDetailPage() {
           : Number(b.benefit_value || 0)), 0);
       setCurrentTotal((effSalary || 0) + monthlyBenefits);
 
-      const { data: h } = await supabase
-        .from('employee_change_history')
-        .select('id, change_type, old_grade_id, new_grade_id, old_salary, new_salary, currency, effective_month, note, changed_at')
-        .eq('employee_id', id)
-        .order('changed_at', { ascending: true });
-      const rows = (h as ChangeRow[]) || [];
+      const rows = (historyRes.data as ChangeRow[]) || [];
       setHistory(rows);
 
-      // Resolve grade names for any grade ids referenced by the history (so the
-      // From/To columns can show grade transitions, not just salary).
-      const gradeIds = Array.from(new Set(
+      const gradesData = gradesRes.data || [];
+      const gIds = gradesData.map((g: any) => g.id);
+      const emps = empsRes.data || [];
+      const userIds = emps.map((x: any) => x.user_id).filter(Boolean);
+
+      // Grade ids referenced by the history (for the From/To grade names).
+      const histGradeIds = Array.from(new Set(
         rows.flatMap(r => [r.old_grade_id, r.new_grade_id]).filter(Boolean) as string[]
       ));
-      if (e?.grade_id) gradeIds.push(e.grade_id);
-      if (gradeIds.length) {
-        const { data: gn } = await supabase
-          .from('employee_grades')
-          .select('id, name')
-          .in('id', Array.from(new Set(gradeIds)));
-        const map: Record<string, string> = {};
-        (gn || []).forEach((g: any) => { map[g.id] = g.name; });
-        setGradeNames(map);
-      }
+      if (e?.grade_id) histGradeIds.push(e.grade_id);
 
-      // Grades (with current salary) + managers for the action modals.
-      if (e?.company_id) {
-        const today = new Date().toISOString().split('T')[0];
-        const { data: gradesData } = await supabase
-          .from('employee_grades')
-          .select('id, name, level')
-          .eq('company_id', e.company_id)
-          .eq('active', true)
-          .order('level');
-        const gIds = (gradesData || []).map((g: any) => g.id);
-        const { data: salCfg } = gIds.length
-          ? await supabase.from('grade_salary_config')
+      // Wave 2 — lookups that depend on wave-1 ids, in parallel.
+      const [gnRes, salCfgRes, gradeBenRes, roleRes] = await Promise.all([
+        histGradeIds.length
+          ? supabase.from('employee_grades').select('id, name').in('id', Array.from(new Set(histGradeIds)))
+          : Promise.resolve({ data: [] } as any),
+        gIds.length
+          ? supabase.from('grade_salary_config')
               .select('grade_id, salary, currency, effective_from')
               .in('grade_id', gIds).lte('effective_from', today)
               .order('effective_from', { ascending: false })
-          : { data: [] };
-        const salMap: Record<string, { salary: number; currency: string }> = {};
-        (salCfg || []).forEach((s: any) => { if (!salMap[s.grade_id]) salMap[s.grade_id] = { salary: s.salary, currency: s.currency }; });
-        setGrades((gradesData || []).map((g: any) => ({ ...g, salary: salMap[g.id]?.salary, currency: salMap[g.id]?.currency })));
-
-        // Per-grade total package (basic + monthly benefits) for the journey chart.
-        const { data: gradeBen } = gIds.length
-          ? await supabase.from('grade_benefits')
+          : Promise.resolve({ data: [] } as any),
+        gIds.length
+          ? supabase.from('grade_benefits')
               .select('grade_id, benefit_type, benefit_value, value_type, active')
               .in('grade_id', gIds).eq('active', true)
-          : { data: [] };
-        const benByGrade: Record<string, number> = {};
-        (gradeBen || []).forEach((b: any) => {
-          if (/annual/i.test(b.benefit_type)) return;
-          const basic = salMap[b.grade_id]?.salary ?? 0;
-          benByGrade[b.grade_id] = (benByGrade[b.grade_id] || 0) +
-            (b.value_type === 'percentage' ? (Number(b.benefit_value) / 100) * basic : Number(b.benefit_value || 0));
-        });
-        const totals: Record<string, number> = {};
-        gIds.forEach((gid: string) => { totals[gid] = (salMap[gid]?.salary ?? 0) + (benByGrade[gid] || 0); });
-        setGradeTotals(totals);
+          : Promise.resolve({ data: [] } as any),
+        userIds.length
+          ? supabase.from('user_roles').select('user_id, roles(name)').in('user_id', userIds)
+          : Promise.resolve({ data: [] } as any),
+      ]);
 
-        // Managers = company employees holding the Manager role.
-        const { data: emps } = await supabase
-          .from('employees').select('id, user_id, first_name, last_name').eq('company_id', e.company_id);
-        const userIds = (emps || []).map((x: any) => x.user_id).filter(Boolean);
-        if (userIds.length) {
-          const { data: roleData } = await supabase
-            .from('user_roles').select('user_id, roles(name)').in('user_id', userIds);
-          const mgrUserIds = new Set((roleData || []).filter((r: any) => r.roles?.name === 'Manager').map((r: any) => r.user_id));
-          setManagers((emps || []).filter((x: any) => mgrUserIds.has(x.user_id)).map((x: any) => ({ id: x.id, name: `${x.first_name} ${x.last_name}` })));
-        } else {
-          setManagers([]);
-        }
-      }
+      const map: Record<string, string> = {};
+      (gnRes.data || []).forEach((g: any) => { map[g.id] = g.name; });
+      setGradeNames(map);
+
+      const salMap: Record<string, { salary: number; currency: string }> = {};
+      (salCfgRes.data || []).forEach((s: any) => { if (!salMap[s.grade_id]) salMap[s.grade_id] = { salary: s.salary, currency: s.currency }; });
+      setGrades(gradesData.map((g: any) => ({ ...g, salary: salMap[g.id]?.salary, currency: salMap[g.id]?.currency })));
+
+      // Per-grade total package (basic + monthly benefits) for the journey chart.
+      const benByGrade: Record<string, number> = {};
+      (gradeBenRes.data || []).forEach((b: any) => {
+        if (/annual/i.test(b.benefit_type)) return;
+        const basic = salMap[b.grade_id]?.salary ?? 0;
+        benByGrade[b.grade_id] = (benByGrade[b.grade_id] || 0) +
+          (b.value_type === 'percentage' ? (Number(b.benefit_value) / 100) * basic : Number(b.benefit_value || 0));
+      });
+      const totals: Record<string, number> = {};
+      gIds.forEach((gid: string) => { totals[gid] = (salMap[gid]?.salary ?? 0) + (benByGrade[gid] || 0); });
+      setGradeTotals(totals);
+
+      // Managers = company employees holding the Manager role.
+      const mgrUserIds = new Set((roleRes.data || []).filter((r: any) => r.roles?.name === 'Manager').map((r: any) => r.user_id));
+      setManagers(emps.filter((x: any) => mgrUserIds.has(x.user_id)).map((x: any) => ({ id: x.id, name: `${x.first_name} ${x.last_name}` })));
     } finally {
       setLoading(false);
     }
