@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,7 +12,7 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
-import { Search, Plus, Trash2, Copy, Check, Upload, Key, Award, Edit2, UserCheck, TrendingUp } from 'lucide-react';
+import { Search, Plus, Archive, Copy, Check, Upload, Key, Award, Edit2, UserCheck, TrendingUp } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -596,42 +597,39 @@ const EmployeesPage: React.FC = () => {
     }
   };
 
-  const deleteEmployee = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this employee?')) return;
+  // Archive (soft delete): keep the record but set status Inactive + archived_at
+  // so the employee's history stays viewable.
+  const archiveEmployee = async (id: string) => {
+    if (!confirm('Archive this employee? They will be set to Inactive but kept for history.')) return;
 
     try {
       setDeleteLoading(id);
-      const { error } = await supabase.from('employees').delete().eq('id', id);
+      const { error } = await supabase.from('employees')
+        .update({ status: 'Inactive', archived_at: new Date().toISOString(), archived_by: user?.id ?? null })
+        .eq('id', id);
       if (error) {
-        // Extract error message from Supabase error object
-        let errorMsg = 'Failed to delete employee';
+        let errorMsg = 'Failed to archive employee';
         if (typeof error === 'object' && error !== null) {
-          if ('message' in error && error.message) {
-            errorMsg = String(error.message);
-          } else if ('details' in error && error.details) {
-            errorMsg = String(error.details);
-          } else if ('hint' in error && error.hint) {
-            errorMsg = String(error.hint);
-          }
+          if ('message' in error && error.message) errorMsg = String(error.message);
+          else if ('details' in error && error.details) errorMsg = String(error.details);
+          else if ('hint' in error && error.hint) errorMsg = String(error.hint);
         }
         throw new Error(errorMsg);
       }
 
-      setMessage({ type: 'success', text: 'Employee deleted successfully' });
+      setMessage({ type: 'success', text: 'Employee archived' });
       fetchEmployees(currentPage);
       setTimeout(() => setMessage(null), 3000);
     } catch (err) {
-      let displayError = 'Failed to delete employee';
-      if (err instanceof Error) {
-        displayError = err.message;
-      } else if (typeof err === 'string') {
-        displayError = err;
-      } else if (typeof err === 'object' && err !== null) {
+      let displayError = 'Failed to archive employee';
+      if (err instanceof Error) displayError = err.message;
+      else if (typeof err === 'string') displayError = err;
+      else if (typeof err === 'object' && err !== null) {
         const errObj = err as any;
         displayError = errObj.message || errObj.details || errObj.error?.message || JSON.stringify(err);
       }
       setMessage({ type: 'error', text: displayError });
-      console.error('Error deleting employee:', err);
+      console.error('Error archiving employee:', err);
     } finally {
       setDeleteLoading(null);
     }
@@ -749,12 +747,12 @@ const EmployeesPage: React.FC = () => {
             <Key size={18} className="text-orange-600" />
           </button>
           <button
-            onClick={() => deleteEmployee(row.id)}
+            onClick={() => archiveEmployee(row.id)}
             disabled={deleteLoading === row.id}
             className="p-1 hover:bg-gray-200 rounded transition disabled:opacity-50"
-            title="Delete"
+            title="Archive (set Inactive, keep history)"
           >
-            <Trash2 size={18} className="text-red-600" />
+            <Archive size={18} className="text-amber-600" />
           </button>
             </>
           )}
@@ -1083,7 +1081,7 @@ const EmployeesPage: React.FC = () => {
                 {grades.length === 0 ? (
                   <p className="text-xs text-gray-400 italic py-2">
                     No grades configured.{' '}
-                    <a href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</a>.
+                    <Link href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</Link>.
                   </p>
                 ) : (
                   <select
@@ -1197,7 +1195,7 @@ const EmployeesPage: React.FC = () => {
               {grades.length === 0 ? (
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
                   No grades configured yet.{' '}
-                  <a href="/admin/grades" className="underline font-medium">Create grades first</a>.
+                  <Link href="/admin/grades" className="underline font-medium">Create grades first</Link>.
                 </div>
               ) : (
                 <select
@@ -1344,7 +1342,7 @@ const EmployeesPage: React.FC = () => {
               {grades.length === 0 ? (
                 <p className="text-xs text-gray-400 italic py-2">
                   No grades configured.{' '}
-                  <a href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</a>.
+                  <Link href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</Link>.
                 </p>
               ) : (
                 <select

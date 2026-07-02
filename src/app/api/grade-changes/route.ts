@@ -46,11 +46,15 @@ export async function GET(request: NextRequest) {
     if (!roles.some(r => ALLOWED.includes(r))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const status = request.nextUrl.searchParams.get('status');
+    const companyId = request.nextUrl.searchParams.get('company_id');
     let q = supabaseAdmin
       .from('grade_change_requests')
       .select('*, employees:employee_id(first_name,last_name,email), curr:current_grade_id(name,level), req:requested_grade_id(name,level)')
       .order('requested_at', { ascending: false });
     if (status) q = q.eq('status', status);
+    // Scope to the company selected in the UI so multi-company admins only see
+    // the requests for the company they're currently viewing.
+    if (companyId) q = q.eq('company_id', companyId);
     const { data, error } = await q;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ data });

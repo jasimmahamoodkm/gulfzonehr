@@ -6,6 +6,7 @@ import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 import { EmployeeGrade } from '@/types/index';
 import { apiUrl } from '@/lib/api';
@@ -30,6 +31,7 @@ const EMPTY_FORM: GradeFormData = { name: '', level: '', description: '' };
 
 export default function GradesPage() {
   const { user } = useAuth();
+  const { selectedCompany } = useCompany();
   const [grades, setGrades] = useState<EmployeeGrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -51,9 +53,10 @@ export default function GradesPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const res = await fetch(apiUrl('/api/admin/grades'), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const url = selectedCompany?.id
+        ? apiUrl(`/api/admin/grades?company_id=${selectedCompany.id}`)
+        : apiUrl('/api/admin/grades');
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to fetch grades');
       setGrades(json.data || []);
@@ -62,8 +65,9 @@ export default function GradesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCompany?.id]);
 
+  // Re-fetch whenever the user or the selected company changes.
   useEffect(() => {
     if (user) fetchGrades();
   }, [user, fetchGrades]);
@@ -112,6 +116,8 @@ export default function GradesPage() {
           name: formData.name.trim(),
           level: Number(formData.level),
           description: formData.description.trim() || undefined,
+          // Create the grade under the company currently selected in the UI.
+          ...(editingGrade ? {} : { company_id: selectedCompany?.id }),
         }),
       });
       const json = await res.json();

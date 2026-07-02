@@ -7,49 +7,63 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-async function getCompanyId(request: NextRequest): Promise<{ companyId: string | null; error: NextResponse | null }> {
+/**
+ * Resolve which company the request operates on.
+ * If the client passes a company_id (the company selected in the UI), honor it
+ * — but only after verifying the caller may access it: Super Admins can use any
+ * company; everyone else only companies they're assigned to. With no requested
+ * company, fall back to the caller's own company.
+ */
+async function getCompanyId(
+  request: NextRequest,
+  requested?: string | null,
+): Promise<{ companyId: string | null; userId: string | null; error: NextResponse | null }> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { companyId: null, userId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
   const token = authHeader.substring(7);
   const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
   if (userError || !user) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { companyId: null, userId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
-  // Look up company_id from users table, fallback to user_companies (primary)
+
+  const { data: roleRows } = await supabaseAdmin.from('user_roles').select('roles(name)').eq('user_id', user.id);
+  const isSuperAdmin = (roleRows || []).some((r: any) => r.roles?.name === 'Super Admin');
+
+  // Honor an explicitly requested company once access is verified.
+  if (requested) {
+    if (isSuperAdmin) return { companyId: requested, userId: user.id, error: null };
+    const { data: ud } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
+    const { data: uc } = await supabaseAdmin
+      .from('user_companies').select('company_id').eq('user_id', user.id).eq('company_id', requested).maybeSingle();
+    if (ud?.company_id === requested || uc) return { companyId: requested, userId: user.id, error: null };
+    return { companyId: null, userId: user.id, error: NextResponse.json({ error: 'No access to that company' }, { status: 403 }) };
+  }
+
+  // Fall back to the caller's own company.
   const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
   let companyId: string | null = userData?.company_id ?? null;
-
   if (!companyId) {
     const { data: ucData } = await supabaseAdmin
-      .from('user_companies')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .eq('is_primary', true)
-      .single();
+      .from('user_companies').select('company_id').eq('user_id', user.id).eq('is_primary', true).maybeSingle();
     companyId = ucData?.company_id ?? null;
   }
-
   if (!companyId) {
     const { data: anyUc } = await supabaseAdmin
-      .from('user_companies')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .single();
+      .from('user_companies').select('company_id').eq('user_id', user.id).limit(1).maybeSingle();
     companyId = anyUc?.company_id ?? null;
   }
-
   if (!companyId) {
-    return { companyId: null, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
+    return { companyId: null, userId: user.id, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
   }
-  return { companyId, error: null };
+  return { companyId, userId: user.id, error: null };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { companyId, error } = await getCompanyId(request);
+    const requested = request.nextUrl.searchParams.get('company_id');
+    const { companyId, error } = await getCompanyId(request, requested);
     if (error) return error;
 
     // Fetch grades
@@ -111,11 +125,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const body = await request.json();
-    const { name, level, description } = body;
+    const { name, level, description, company_id: requestedCompany } = body;
+    const { companyId, error } = await getCompanyId(request, requestedCompany);
+    if (error) return error;
 
     if (!name || level === undefined || level === null) {
       return NextResponse.json({ error: 'Missing required fields: name, level' }, { status: 400 });

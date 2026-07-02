@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
 import Card from '@/components/ui/Card';
@@ -32,6 +33,7 @@ interface ChangeRequest {
 
 export default function GradeApprovalsPage() {
   const { user } = useAuth();
+  const { selectedCompany } = useCompany();
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -43,7 +45,8 @@ export default function GradeApprovalsPage() {
       setLoading(true);
       setPageError(null);
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(apiUrl('/api/grade-changes?status=pending'), {
+      const q = `status=pending${selectedCompany?.id ? `&company_id=${selectedCompany.id}` : ''}`;
+      const res = await fetch(apiUrl(`/api/grade-changes?${q}`), {
         headers: { 'Authorization': `Bearer ${session?.access_token}` },
       });
       const json = await res.json();
@@ -54,7 +57,7 @@ export default function GradeApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCompany?.id]);
 
   useEffect(() => { load(); }, [load]);
 

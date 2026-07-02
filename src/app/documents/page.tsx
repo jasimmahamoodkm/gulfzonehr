@@ -10,7 +10,8 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Table from '@/components/ui/Table';
 import DatePicker from '@/components/ui/DatePicker';
-import { Plus, AlertCircle, Clock, CheckCircle, Eye, Trash2, Lock } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, AlertCircle, Clock, CheckCircle, Eye, Trash2, Lock, FileText, CreditCard } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -67,6 +68,12 @@ const DocumentsPage: React.FC = () => {
 
   const [showModal, setShowModal] = useState(false);
   const [documentFilter, setDocumentFilter] = useState<'all' | 'expiring' | 'expired'>('all');
+
+  // Allow deep-linking a filter (e.g. dashboard tiles link to /documents?filter=expired)
+  React.useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('filter');
+    if (f === 'expiring' || f === 'expired') setDocumentFilter(f);
+  }, []);
   const [documents, setDocuments] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -489,6 +496,18 @@ const DocumentsPage: React.FC = () => {
   return (
     <Layout>
       <div className="space-y-6">
+        {/* Tab bar — Documents / PDC Cheques */}
+        {!isEmployee && (
+          <div className="flex gap-2 border-b border-gray-200">
+            <span className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">
+              <FileText size={16} /> Documents
+            </span>
+            <Link href="/documents/pdc" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800">
+              <CreditCard size={16} /> PDC Cheques
+            </Link>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>

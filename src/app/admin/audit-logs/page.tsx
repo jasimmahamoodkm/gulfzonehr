@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 import { AuditLog, AuditLogFilter } from '@/types/audit';
 import Card from '@/components/ui/Card';
@@ -13,18 +14,19 @@ const ITEMS_PER_PAGE = 50;
 
 export default function AuditLogsPage() {
   const { user } = useAuth();
+  const { selectedCompany } = useCompany();
+  const companyId = selectedCompany?.id || user?.company_id;
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
-  const [filters, setFilters] = useState<AuditLogFilter>({
-    company_id: user?.company_id,
-  });
+  const [filters, setFilters] = useState<AuditLogFilter>({});
 
   useEffect(() => {
-    if (!user?.company_id) return;
+    if (!companyId) return;
     loadLogs();
-  }, [user, page, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, page, filters]);
 
   const loadLogs = async () => {
     try {
@@ -33,7 +35,7 @@ export default function AuditLogsPage() {
       let query = supabase
         .from('audit_logs')
         .select('*', { count: 'exact' })
-        .eq('company_id', user?.company_id || '');
+        .eq('company_id', companyId || '');
 
       // Apply filters
       if (filters.action) {

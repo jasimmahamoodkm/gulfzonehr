@@ -137,6 +137,15 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     requiresCompany: false, // Employees can view their own documents without company selection
   },
 
+  // PDC Cheque Tracking (under Documents)
+  {
+    path: '/documents/pdc',
+    requiredRoles: ['Super Admin', 'Company Admin', 'HR Manager', 'Manager'],
+    description: 'PDC Cheque Tracking',
+    requiresAuth: true,
+    requiresCompany: true,
+  },
+
   // Payroll Management
   {
     path: '/payroll',

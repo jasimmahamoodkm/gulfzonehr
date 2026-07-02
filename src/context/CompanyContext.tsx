@@ -28,6 +28,36 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoading(true);
       loadedForUser.current = userId;
 
+      // Super Admins can select ANY company, not just the ones assigned to them.
+      const { data: roleRows } = await supabase
+        .from('user_roles')
+        .select('roles(name)')
+        .eq('user_id', userId);
+      const isSuperAdmin = (roleRows || []).some((r: any) => r.roles?.name === 'Super Admin');
+
+      if (isSuperAdmin) {
+        const { data: allCompanies } = await supabase
+          .from('companies')
+          .select('*')
+          .order('name', { ascending: true });
+        if (allCompanies && allCompanies.length > 0) {
+          setCompanies(allCompanies as unknown as Company[]);
+          // Default to the admin's primary assigned company (if any), else the
+          // first — but never override a selection the user already made.
+          const { data: primaryUc } = await supabase
+            .from('user_companies')
+            .select('company_id')
+            .eq('user_id', userId)
+            .eq('is_primary', true)
+            .maybeSingle();
+          const defaultCompany =
+            (primaryUc?.company_id && allCompanies.find((c: any) => c.id === primaryUc.company_id)) ||
+            allCompanies[0];
+          setSelectedCompanyState(prev => prev ?? (defaultCompany as unknown as Company));
+          return;
+        }
+      }
+
       // Single query: user's companies with full details via join
       const { data: ucData, error: ucError } = await supabase
         .from('user_companies')

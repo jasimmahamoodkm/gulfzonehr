@@ -56,6 +56,7 @@ const CompaniesPage: React.FC = () => {
     try {
       setLoading(true);
 
+      let list: any[] = [];
       if (isSuperAdmin) {
         // Super Admin: all companies
         const { data, error } = await supabase
@@ -63,7 +64,7 @@ const CompaniesPage: React.FC = () => {
           .select('id,name,email,phone,industry,city,country,founded_year,address,employee_count,created_at')
           .order('name', { ascending: true });
         if (error) throw error;
-        setCompanies(data || []);
+        list = data || [];
       } else {
         // Company Admin: only their assigned company
         const { data: ucData } = await supabase
@@ -82,8 +83,24 @@ const CompaniesPage: React.FC = () => {
           .eq('id', companyId)
           .single();
         if (error) throw error;
-        setCompanies(data ? [data] : []);
+        list = data ? [data] : [];
       }
+
+      // The stored employee_count column drifts (it isn't updated on add /
+      // archive / delete) — compute the real count from the employees table.
+      const ids = list.map((c) => c.id);
+      if (ids.length) {
+        const { data: emps } = await supabase
+          .from('employees')
+          .select('company_id')
+          .in('company_id', ids);
+        const counts: Record<string, number> = {};
+        (emps || []).forEach((e: { company_id: string }) => {
+          counts[e.company_id] = (counts[e.company_id] || 0) + 1;
+        });
+        list = list.map((c) => ({ ...c, employee_count: counts[c.id] || 0 }));
+      }
+      setCompanies(list);
     } catch (err) {
       console.error('Error fetching companies:', err);
       setMessage({ type: 'error', text: 'Failed to load companies' });

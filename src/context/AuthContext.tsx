@@ -108,9 +108,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Initialize auth state on mount
   useEffect(() => {
+    // Safety net: never let the app hang on the loading spinner if auth init
+    // stalls (e.g. a token-refresh request that never resolves). After a while
+    // we stop blocking so the app can proceed; if the session later resolves,
+    // onAuthStateChange picks it up. We do NOT abort getSession itself, so a
+    // merely-slow (but valid) session is never killed mid-flight.
+    let settled = false;
+    const safety = setTimeout(() => {
+      if (!settled) {
+        console.warn('Auth initialization slow — unblocking the UI.');
+        setLoading(false);
+      }
+    }, 10000);
+
     const initializeAuth = async () => {
       try {
-        // Check current session
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user) {
@@ -139,6 +151,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.error('Auth initialization error:', err);
         setError((err as AuthError).message || 'Failed to initialize authentication');
       } finally {
+        settled = true;
+        clearTimeout(safety);
         setLoading(false);
       }
     };
@@ -186,6 +200,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => {
+      clearTimeout(safety);
       subscription?.unsubscribe();
     };
   }, []);
