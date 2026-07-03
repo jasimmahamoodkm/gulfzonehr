@@ -21,6 +21,17 @@ blocked=0
 while read local_ref local_sha remote_ref remote_sha; do
   case " $protected_main " in
     *" $remote_ref "*)
+      # main is RELEASE-ONLY. Pushing it must be a deliberate, explicit act:
+      #   ALLOW_MAIN_PUSH=1 git push origin main
+      # Day-to-day work goes to feature branches / develop.
+      if [ "$ALLOW_MAIN_PUSH" != "1" ]; then
+        echo ""
+        echo "🚫 Push to '${remote_ref#refs/heads/}' blocked — main is release-only."
+        echo "   Work belongs on feature branches / develop."
+        echo "   For an intentional release:  ALLOW_MAIN_PUSH=1 git push origin main"
+        blocked=1
+        break
+      fi
       echo ""
       echo "🔒 Push to '${remote_ref#refs/heads/}' detected — verifying before it lands."
       echo "   Running type-check..."
