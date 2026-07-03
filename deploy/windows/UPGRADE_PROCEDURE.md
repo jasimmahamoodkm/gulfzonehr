@@ -34,10 +34,16 @@ pm2 list
 
 ## Phase 1 — Database update (zero downtime — do this first)
 
-5. In the **client** Supabase **SQL Editor**, run **section 13
-   ("FEATURE MIGRATIONS")** from `deploy/gulfzone_hr_deployment.sql`.
-   It is **idempotent** — objects that already exist are skipped, so it is
-   always safe to run the whole section.
+5. In the **client** Supabase **SQL Editor**, run the whole of
+   **`deploy/client_upgrade_021-026.sql`**. It contains only the schema
+   migrations (021–026) and is **idempotent** — objects that already exist
+   are skipped, so it is always safe to re-run.
+
+   > ⚠️ Do **NOT** run `gulfzone_hr_deployment.sql` on an existing database.
+   > Its seed/business-data sections are for a **fresh, empty** database only
+   > and will fail with duplicate-key errors (23505) against live data.
+   > (The SQL editor runs scripts in one transaction, so such a failure rolls
+   > everything back — annoying but harmless.)
 6. Verify (all three must succeed; 0 rows is fine):
 
 ```sql
