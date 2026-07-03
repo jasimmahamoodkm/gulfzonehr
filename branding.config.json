@@ -1,0 +1,14 @@
+{
+  "appName": "GulfZone HR Management System",
+  "shortName": "GulfZone HR",
+  "organizationName": "GulfZone Group",
+  "description": "Comprehensive HR management solution for GulfZone Group",
+  "initials": "GZ",
+  "colors": {
+    "primary": "#2563EB",
+    "primaryDark": "#1E40AF",
+    "themeColor": "#2563EB",
+    "background": "#ffffff"
+  },
+  "basePath": "/HRportal"
+}

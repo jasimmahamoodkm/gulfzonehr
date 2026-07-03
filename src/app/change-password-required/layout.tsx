@@ -1,7 +1,8 @@
 import React from 'react';
+import { BRANDING } from '@/config/branding';
 
 export const metadata = {
-  title: 'Change Password - GulfZone HR',
+  title: `Change Password - ${BRANDING.shortName}`,
   description: 'Change your temporary password',
 };
 

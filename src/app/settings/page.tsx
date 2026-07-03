@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import { Lock, Bell, Shield } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { BRANDING } from '@/config/branding';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -120,7 +121,7 @@ const SettingsPage: React.FC = () => {
 
             <Card header={<h2 className="text-lg font-semibold">Organization Settings</h2>}>
               <div className="space-y-4">
-                <Input label="Organization Name" defaultValue="GulfZone Group" readOnly />
+                <Input label="Organization Name" defaultValue={BRANDING.organizationName} readOnly />
                 <Input label="Default Currency" defaultValue="AED (UAE Dirham)" readOnly />
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Default Timezone</label>

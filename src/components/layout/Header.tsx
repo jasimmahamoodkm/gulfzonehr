@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Menu, X, ChevronDown } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
+import { BRANDING } from '@/config/branding';
 
 interface HeaderProps {
   userName?: string;
@@ -53,10 +54,10 @@ const Header: React.FC<HeaderProps> = ({
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">GZ</span>
+              <span className="text-white font-bold text-lg">{BRANDING.initials}</span>
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-bold text-gray-900">GulfZone HR</h1>
+              <h1 className="text-xl font-bold text-gray-900">{BRANDING.shortName}</h1>
               <p className="text-xs text-gray-500">{selectedCompany?.name || 'Select Company'}</p>
             </div>
           </Link>

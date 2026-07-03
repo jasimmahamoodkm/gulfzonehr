@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/hooks/useAuth';
+import { BRANDING } from '@/config/branding';
 import { useCompany } from '@/context/CompanyContext';
 
 const loginSchema = z.object({
@@ -158,7 +159,7 @@ function LoginPageInner() {
     <div className="bg-white rounded-lg shadow-xl p-8 max-w-md mx-auto">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-        <p className="text-gray-600">Sign in to your GulfZone HR account</p>
+        <p className="text-gray-600">Sign in to your {BRANDING.shortName} account</p>
       </div>
 
       {errorMessage && (
