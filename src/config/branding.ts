@@ -16,3 +16,19 @@ export const BRANDING = branding;
 
 /** Prefix a public asset path with the configured basePath. */
 export const brandAsset = (p: string): string => `${BRANDING.basePath}${p}`;
+
+/**
+ * Resolve an optional branding image from config.
+ * Returns null when not configured (caller falls back to the generated
+ * initials icon). Absolute URLs pass through; public paths get the basePath.
+ */
+const resolveImage = (p: string | undefined): string | null => {
+  if (!p) return null;
+  return /^https?:\/\//.test(p) ? p : brandAsset(p);
+};
+
+/** Custom header logo image, or null → show the initials tile. */
+export const brandLogo = (): string | null => resolveImage(BRANDING.images?.logo);
+
+/** Custom favicon, or null → use the generated icon PNGs. */
+export const brandFavicon = (): string | null => resolveImage(BRANDING.images?.favicon);

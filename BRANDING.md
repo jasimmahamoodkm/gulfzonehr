@@ -13,6 +13,8 @@ the icon generator. To build the same product for another client:
 | `organizationName` | Settings → Organization name |
 | `description` | Metadata + manifest description |
 | `initials` | Header logo tile and generated app icons (2–3 letters) |
+| `images.logo` | Optional header logo image (e.g. `/branding/logo.png`, or a full URL). Empty → the initials tile is shown |
+| `images.favicon` | Optional browser-tab icon (e.g. `/branding/favicon.png`). Empty → the generated initials icons are used |
 | `colors.primary` / `primaryDark` | Icon tile gradient |
 | `colors.themeColor` | Browser/PWA theme color (address bar, splash) |
 | `colors.background` | PWA splash background |
@@ -25,9 +27,14 @@ npm run generate-icons
 ```
 
 Renders the initials on the gradient tile into `public/icons/` (favicon 192/512,
-maskable, apple-touch-icon). **If the client has real logo artwork**, skip the
-script and drop their PNGs into `public/icons/` using the same four filenames:
-`icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`.
+maskable, apple-touch-icon). **If the client has real logo artwork:**
+
+- Put the files under `public/branding/` (e.g. `logo.png`, `favicon.png`) and
+  set `images.logo` / `images.favicon` in the config — the header and browser
+  tab use them automatically, falling back to the initials icons when empty.
+- For the PWA/home-screen icons, drop their PNGs into `public/icons/` using the
+  same four filenames: `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`,
+  `apple-touch-icon.png` (and skip the generator).
 
 ## 3. Rebuild
 

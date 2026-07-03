@@ -4,6 +4,10 @@
   "organizationName": "GulfZone Group",
   "description": "Comprehensive HR management solution for GulfZone Group",
   "initials": "GZ",
+  "images": {
+    "logo": "",
+    "favicon": ""
+  },
   "colors": {
     "primary": "#2563EB",
     "primaryDark": "#1E40AF",
