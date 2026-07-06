@@ -36,6 +36,19 @@ maskable, apple-touch-icon). **If the client has real logo artwork:**
   same four filenames: `icon-192.png`, `icon-512.png`, `icon-512-maskable.png`,
   `apple-touch-icon.png` (and skip the generator).
 
+## Recommended image sizes
+
+| Image | Optimum | Notes |
+|---|---|---|
+| `images.logo` | **120px tall** PNG (transparent) or SVG | Header renders it at 40px — 3× keeps it crisp on Retina. Width free (typ. 120–480px, ratio ≤ 4:1), no padding in the artwork |
+| `images.favicon` | **512×512** square PNG (min 256×256) | Browsers scale down to 16–32px — use a bold, simple mark, not a wordmark |
+| `public/icons/icon-192.png` | 192×192 | Android home screen |
+| `public/icons/icon-512.png` | 512×512 | Install/splash |
+| `public/icons/icon-512-maskable.png` | 512×512, mark inside central ~66% | Full-bleed background; Android crops to circle/squircle |
+| `public/icons/apple-touch-icon.png` | 180×180 full-bleed | iOS rounds the corners itself |
+
+Keep logos < 50 KB and icons < 100 KB.
+
 ## 3. Rebuild
 
 ```bash
