@@ -1,4 +1,5 @@
 import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
+import { authorizeGrade } from '@/lib/gradeAccess';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,69 +9,15 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-async function getCompanyId(request: NextRequest): Promise<{ companyId: string | null; error: NextResponse | null }> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-  const token = authHeader.substring(7);
-  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-  if (userError || !user) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-  // Look up company_id from users table, fallback to user_companies (primary)
-  const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
-  let companyId: string | null = userData?.company_id ?? null;
-
-  if (!companyId) {
-    const { data: ucData } = await supabaseAdmin
-      .from('user_companies')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .eq('is_primary', true)
-      .single();
-    companyId = ucData?.company_id ?? null;
-  }
-
-  if (!companyId) {
-    const { data: anyUc } = await supabaseAdmin
-      .from('user_companies')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .single();
-    companyId = anyUc?.company_id ?? null;
-  }
-
-  if (!companyId) {
-    return { companyId: null, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
-  }
-  return { companyId, error: null };
-}
-
-async function verifyGradeOwnership(gradeId: string, companyId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from('employee_grades')
-    .select('id')
-    .eq('id', gradeId)
-    .eq('company_id', companyId)
-    .single();
-  return !!data;
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    // Authorize against the GRADE's company (multi-company safe)
+    const { grade, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const { data, error: dbError } = await supabaseAdmin
       .from('grade_leave_config')
@@ -81,8 +28,7 @@ export async function GET(
           color
         )
       `)
-      .eq('grade_id', gradeId)
-      .eq('company_id', companyId!);
+      .eq('grade_id', gradeId);
 
     if (dbError) {
       return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -106,14 +52,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, userId, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const body = await request.json();
     const {
@@ -163,7 +104,8 @@ export async function POST(
         .from('grade_leave_config')
         .insert({
           grade_id: gradeId,
-          company_id: companyId,
+          // Config rows belong to the grade's company, not the caller's.
+          company_id: grade.company_id,
           leave_type_id,
           days_per_year: Number(days_per_year),
           carry_forward_days: Number(carry_forward_days),
@@ -178,10 +120,9 @@ export async function POST(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
-        try {
-      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+    try {
       const hdrs = Object.fromEntries(request.headers.entries());
-      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'create_leave_config', resource_type: 'grade_leave_config', resource_id: undefined, resource_name: `Leave config for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: grade.company_id, action: 'create_leave_config', resource_type: 'grade_leave_config', resource_id: undefined, resource_name: `Leave config for grade ${grade.name}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
     } catch (_) {}
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
@@ -194,14 +135,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, userId, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const { searchParams } = new URL(request.url);
     const leaveTypeId = searchParams.get('leave_type_id');
@@ -214,17 +150,15 @@ export async function DELETE(
       .from('grade_leave_config')
       .delete()
       .eq('grade_id', gradeId)
-      .eq('company_id', companyId!)
       .eq('leave_type_id', leaveTypeId);
 
     if (dbError) {
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
-        try {
-      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
+    try {
       const hdrs = Object.fromEntries(request.headers.entries());
-      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'delete_leave_config', resource_type: 'grade_leave_config', resource_id: undefined, resource_name: `Leave config for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: grade.company_id, action: 'delete_leave_config', resource_type: 'grade_leave_config', resource_id: undefined, resource_name: `Leave config for grade ${grade.name}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
     } catch (_) {}
     return NextResponse.json({ success: true });
   } catch (err) {
