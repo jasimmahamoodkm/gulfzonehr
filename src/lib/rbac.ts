@@ -3,13 +3,11 @@
  * Provides permission checking, role management, and access control functions
  */
 
-import { createClient } from '@supabase/supabase-js';
+// Reuse the app's single Supabase client. This module previously created its
+// own anon client, which shipped a duplicate GoTrueClient (extra auth
+// listeners / storage handling) to every page importing it.
+import { supabase } from '@/lib/supabase';
 import type { PermissionCheckResult } from '@/types/rbac';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
 
 /**
  * Check if a user has a specific permission

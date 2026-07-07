@@ -6,8 +6,6 @@ import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import DatePicker from '@/components/ui/DatePicker';
-import { useAuth } from '@/hooks/useAuth';
-import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
 import { EmployeeGrade, GradeLeaveConfig, GradeSalaryConfig, GradeBenefit, BenefitType } from '@/types/index';
 import { apiUrl } from '@/lib/api';
@@ -51,8 +49,6 @@ interface LeaveType {
 export default function GradeDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
-  const { selectedCompany } = useCompany();
   const gradeId = params.id as string;
 
   const [grade, setGrade] = useState<EmployeeGrade | null>(null);
@@ -126,18 +122,14 @@ export default function GradeDetailPage() {
     }
   }, [gradeId]);
 
-  // --- Load leave types ---
+  // --- Load leave types (global — shared by all companies) ---
   const fetchLeaveTypes = useCallback(async () => {
-    // Use selectedCompany first, fallback to user.company_id
-    const companyId = selectedCompany?.id || user?.company_id;
-    if (!companyId) return;
     const { data } = await supabase
       .from('leave_types')
       .select('id, name, color')
-      .eq('company_id', companyId)
       .order('name');
     setLeaveTypes(data || []);
-  }, [selectedCompany?.id, user?.company_id]);
+  }, []);
 
   // --- Load leave configs ---
   const fetchLeaveConfigs = useCallback(async () => {
@@ -176,14 +168,13 @@ export default function GradeDetailPage() {
   }, [gradeId]);
 
   useEffect(() => {
-    if (!user) return;
     const loadAll = async () => {
       setLoading(true);
       await Promise.all([fetchGrade(), fetchLeaveTypes(), fetchLeaveConfigs(), fetchSalaryConfigs(), fetchBenefits()]);
       setLoading(false);
     };
     loadAll();
-  }, [user, fetchGrade, fetchLeaveTypes, fetchLeaveConfigs, fetchSalaryConfigs, fetchBenefits]);
+  }, [fetchGrade, fetchLeaveTypes, fetchLeaveConfigs, fetchSalaryConfigs, fetchBenefits]);
 
   // --- Leave helpers ---
   const getLeaveConfig = (leaveTypeId: string) =>
