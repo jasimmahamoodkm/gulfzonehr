@@ -59,6 +59,31 @@ npm run build
 client gets their own build with their own `.env.local` (their Supabase
 project) and their own `branding.config.json`.
 
+## Per-company branding (logo + colour)
+
+For a deployment that manages **multiple companies**, each company can show its
+own logo and brand colour — configured in the **same JSON file**, under
+`companyBranding`, keyed by the company's name (case-insensitive):
+
+```json
+"companyBranding": {
+  "GulfZone": { "logo": "/branding/gulfzone.png", "color": "#1D4ED8" },
+  "ALMANAR":  { "logo": "https://cdn.example.com/almanar.svg", "color": "#059669" }
+}
+```
+
+- `logo` — a public path (`/branding/…`, gets the basePath), a full `https://`
+  URL, or a `data:` URI. Empty → falls back to the app logo, then an initials
+  tile tinted with `color`.
+- `color` — hex; used as the payslip header band and the header initials-tile
+  tint for that company.
+
+Where it shows: the **app header** and **sidebar** when that company is
+selected, and the **payslip** header (logo + colour band). Edit the JSON, drop
+any artwork in `public/branding/`, and rebuild — no database or UI changes.
+For **payslips**, prefer a `data:` URI or a public URL, since payslips open in a
+separate print window that won't carry app authentication.
+
 ## What is NOT covered by this config
 
 - **In-app accent colors** (Tailwind `blue-600` classes throughout the UI) —

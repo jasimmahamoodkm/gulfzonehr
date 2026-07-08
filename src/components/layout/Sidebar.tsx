@@ -23,6 +23,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
+import { companyBranding } from '@/config/branding';
 import { useAuth } from '@/hooks/useAuth';
 
 // Admin/HR menu items - shown to Super Admin, Company Admin, HR Manager
@@ -73,6 +74,7 @@ const Sidebar: React.FC = () => {
   // only affects the mobile off-canvas state.
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { selectedCompany } = useCompany();
+  const companyLogo = companyBranding(selectedCompany?.name).logo;
   const { user } = useAuth();
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
@@ -169,9 +171,9 @@ const Sidebar: React.FC = () => {
           <div className="px-4 py-3 m-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Current Company</p>
             <div className="flex items-center gap-2 mt-1">
-              {selectedCompany.logo_url && (
+              {companyLogo && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={selectedCompany.logo_url} alt="" className="h-6 w-auto max-w-[80px] object-contain" />
+                <img src={companyLogo} alt="" className="h-6 w-auto max-w-[80px] object-contain" />
               )}
               <p className="text-sm font-semibold text-gray-900">{selectedCompany.name}</p>
             </div>
