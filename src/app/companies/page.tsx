@@ -12,6 +12,8 @@ import Table from '@/components/ui/Table';
 import { Plus, Edit, Trash2, MapPin, Phone, Mail, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/lib/api';
+import { companyBranding } from '@/config/branding';
 
 const companySchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -46,10 +48,42 @@ const CompaniesPage: React.FC = () => {
   const [companies, setCompanies]     = useState<any[]>([]);
   const [loading, setLoading]         = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null); // cache-busted path after upload
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CompanyFormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
   });
+  const companyName = watch('name');
+
+  const uploadLogo = async (file: File) => {
+    const name = (companyName || '').trim();
+    if (!name) { setMessage({ type: 'error', text: 'Enter the company name first, then upload a logo.' }); return; }
+    setLogoUploading(true);
+    setMessage(null);
+    try {
+      const image: string = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result as string);
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(apiUrl('/api/admin/company-logo'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ company: name, image }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Upload failed');
+      setLogoPreview(`${apiUrl(json.path)}?t=${Date.now()}`);
+      setMessage({ type: 'success', text: `Logo saved (512×512, ${(json.bytes / 1024).toFixed(0)} KB) and written to the config.` });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Logo upload failed' });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const fetchCompanies = useCallback(async () => {
     if (!user) return;
@@ -160,10 +194,11 @@ const CompaniesPage: React.FC = () => {
       founded_year: company.founded_year, address: company.address,
     });
     setEditingId(company.id);
+    setLogoPreview(companyBranding(company.name).logo);
     setShowModal(true);
   };
 
-  const handleCloseModal = () => { setShowModal(false); setEditingId(null); reset(); setMessage(null); };
+  const handleCloseModal = () => { setShowModal(false); setEditingId(null); reset(); setMessage(null); setLogoPreview(null); };
 
   const deleteCompany = async (id: string) => {
     if (!canDelete) return;
@@ -232,7 +267,7 @@ const CompaniesPage: React.FC = () => {
             </p>
           </div>
           {canCreate && (
-            <Button variant="primary" onClick={() => setShowModal(true)} className="gap-2">
+            <Button variant="primary" onClick={() => { reset(); setEditingId(null); setLogoPreview(null); setShowModal(true); }} className="gap-2">
               <Plus size={20} />
               Add Company
             </Button>
@@ -373,6 +408,32 @@ const CompaniesPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
             <input {...register('address')} type="text" placeholder="Enter full address" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>}
+          </div>
+
+          {/* Company logo — uploaded, compressed to 512×512 PNG, path saved to config */}
+          <div className="pt-2 border-t border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Company Logo <span className="font-normal text-gray-400">(auto-compressed to 512×512)</span>
+            </label>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logoPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoPreview} alt="Company logo" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <span className="text-xs text-gray-400">No logo</span>
+                )}
+              </div>
+              <div>
+                <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  disabled={logoUploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ''; }}
+                  className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:cursor-pointer disabled:opacity-50" />
+                <p className="mt-1 text-xs text-gray-400">
+                  {logoUploading ? 'Uploading & compressing…' : 'PNG, JPG, WebP or SVG. Shown in the header, sidebar and payslips.'}
+                </p>
+              </div>
+            </div>
           </div>
 
         </form>

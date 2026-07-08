@@ -79,10 +79,28 @@ own logo and brand colour — configured in the **same JSON file**, under
   tint for that company.
 
 Where it shows: the **app header** and **sidebar** when that company is
-selected, and the **payslip** header (logo + colour band). Edit the JSON, drop
-any artwork in `public/branding/`, and rebuild — no database or UI changes.
-For **payslips**, prefer a `data:` URI or a public URL, since payslips open in a
-separate print window that won't carry app authentication.
+selected, and the **payslip** header (logo + colour band).
+
+### Uploading a company logo from the UI (recommended)
+
+**Companies → edit a company → Company Logo → choose a file.** The image is
+sent to `POST /api/admin/company-logo`, which **compresses it to a 512×512 PNG**
+(aspect preserved with transparent letterboxing), saves it to
+`public/branding/companies/<slug>.png`, and writes that path into
+`branding.config.json → companyBranding[<company>].logo` automatically.
+
+- The saved PNG is served immediately at `/<basePath>/branding/companies/<slug>.png`.
+- In **dev**, the header/sidebar update on the next reload (the JSON is
+  re-read). In **production** the config is baked at build time, so a *new*
+  logo path takes effect on the next `npm run build`; re-uploading over an
+  existing company reuses the same path, so only the image bytes change.
+- Persisting across side-by-side deploys: commit the updated
+  `branding.config.json` **and** `public/branding/companies/*.png`, or copy
+  `public/branding/` into the new release folder.
+
+You can also set `logo`/`color` by hand (path, `https://` URL, or `data:` URI)
+instead of uploading. For **payslips**, prefer an uploaded file or a public URL,
+since payslips open in a separate print window without app authentication.
 
 ## What is NOT covered by this config
 
