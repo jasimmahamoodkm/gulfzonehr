@@ -531,7 +531,7 @@ export default function GradeDetailPage() {
                             />
                             <span className="font-medium text-gray-800">{lt.name}</span>
                           </div>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-600 mb-1">Days per Year</label>
                               <input

@@ -160,7 +160,7 @@ export default function GradesPage() {
     <Layout>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <GraduationCap className="text-blue-600" size={28} />

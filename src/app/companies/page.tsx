@@ -222,7 +222,7 @@ const CompaniesPage: React.FC = () => {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Companies</h1>
             <p className="text-gray-600 mt-1">
@@ -352,7 +352,7 @@ const CompaniesPage: React.FC = () => {
             <input {...register('industry')} type="text" placeholder="Enter industry" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             {errors.industry && <p className="mt-1 text-sm text-red-600">{errors.industry.message}</p>}
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
               <input {...register('city')} type="text" placeholder="City" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />

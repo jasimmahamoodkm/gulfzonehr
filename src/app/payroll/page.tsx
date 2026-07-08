@@ -1164,7 +1164,7 @@ ${payslipLeaveBalances.length > 0 ? `
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
               {isEmployee ? 'My Payroll' : 'Payroll Management'}
@@ -1176,7 +1176,7 @@ ${payslipLeaveBalances.length > 0 ? `
             </p>
           </div>
           {isAdmin && (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button variant="secondary" onClick={() => setShowBatchModal(true)} disabled={!selectedCompany} className="gap-2 disabled:opacity-50">
                 <Users size={20} /> Process All Employees
               </Button>

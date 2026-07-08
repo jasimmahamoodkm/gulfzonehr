@@ -643,37 +643,39 @@ export default function EmployeeDetailPage() {
               No recorded changes yet. Grade and salary changes will appear here.
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr className="text-gray-500">
-                  <th className="text-left px-6 py-2 font-medium">When</th>
-                  <th className="text-left px-6 py-2 font-medium">Type</th>
-                  <th className="text-right px-6 py-2 font-medium">From</th>
-                  <th className="text-right px-6 py-2 font-medium">To</th>
-                  <th className="text-left px-6 py-2 font-medium">Effective</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {[...history].reverse().map(h => {
-                  const ft = fromTo(h);
-                  return (
-                  <tr key={h.id}>
-                    <td className="px-6 py-2 text-gray-700">{new Date(h.changed_at).toLocaleDateString()}</td>
-                    <td className="px-6 py-2"><span className="capitalize">{h.change_type}</span></td>
-                    {h.change_type === 'benefits' ? (
-                      <td className="px-6 py-2 text-gray-700" colSpan={2}>{h.note || 'Benefits updated'}</td>
-                    ) : (
-                      <>
-                        <td className="px-6 py-2 text-right text-gray-600">{ft.from}</td>
-                        <td className="px-6 py-2 text-right font-medium text-gray-900">{ft.to}</td>
-                      </>
-                    )}
-                    <td className="px-6 py-2 text-gray-600">{h.effective_month ? monthLabel(h.effective_month) : '—'}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[36rem]">
+                <thead className="bg-gray-50 border-b">
+                  <tr className="text-gray-500">
+                    <th className="text-left px-6 py-2 font-medium">When</th>
+                    <th className="text-left px-6 py-2 font-medium">Type</th>
+                    <th className="text-right px-6 py-2 font-medium">From</th>
+                    <th className="text-right px-6 py-2 font-medium">To</th>
+                    <th className="text-left px-6 py-2 font-medium">Effective</th>
                   </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y">
+                  {[...history].reverse().map(h => {
+                    const ft = fromTo(h);
+                    return (
+                    <tr key={h.id}>
+                      <td className="px-6 py-2 text-gray-700">{new Date(h.changed_at).toLocaleDateString()}</td>
+                      <td className="px-6 py-2"><span className="capitalize">{h.change_type}</span></td>
+                      {h.change_type === 'benefits' ? (
+                        <td className="px-6 py-2 text-gray-700" colSpan={2}>{h.note || 'Benefits updated'}</td>
+                      ) : (
+                        <>
+                          <td className="px-6 py-2 text-right text-gray-600">{ft.from}</td>
+                          <td className="px-6 py-2 text-right font-medium text-gray-900">{ft.to}</td>
+                        </>
+                      )}
+                      <td className="px-6 py-2 text-gray-600">{h.effective_month ? monthLabel(h.effective_month) : '—'}</td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
 
