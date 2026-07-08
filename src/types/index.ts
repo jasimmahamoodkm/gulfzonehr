@@ -21,6 +21,9 @@ export interface Company {
   industry: string;
   founded_year: number;
   employee_count: number;
+  /** Per-company branding (migration 028) */
+  logo_url?: string | null;
+  brand_color?: string | null;
   company_license?: Document;
   documents?: Document[];
   created_at: string;

@@ -22,6 +22,8 @@ const companySchema = z.object({
   country: z.string().min(2, 'Country is required'),
   founded_year: z.number().min(1900, 'Founded year must be valid'),
   address: z.string().min(5, 'Address must be at least 5 characters'),
+  logo_url: z.string().trim().optional().or(z.literal('')),
+  brand_color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/,'Use a hex colour like #0F172A').optional().or(z.literal('')),
 });
 
 type CompanyFormData = z.infer<typeof companySchema>;
@@ -47,9 +49,11 @@ const CompaniesPage: React.FC = () => {
   const [loading, setLoading]         = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CompanyFormData>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
   });
+  const logoPreview = watch('logo_url');
+  const colorPreview = watch('brand_color');
 
   const fetchCompanies = useCallback(async () => {
     if (!user) return;
@@ -61,7 +65,7 @@ const CompaniesPage: React.FC = () => {
         // Super Admin: all companies
         const { data, error } = await supabase
           .from('companies')
-          .select('id,name,email,phone,industry,city,country,founded_year,address,employee_count,created_at')
+          .select('*')
           .order('name', { ascending: true });
         if (error) throw error;
         list = data || [];
@@ -79,7 +83,7 @@ const CompaniesPage: React.FC = () => {
 
         const { data, error } = await supabase
           .from('companies')
-          .select('id,name,email,phone,industry,city,country,founded_year,address,employee_count,created_at')
+          .select('*')
           .eq('id', companyId)
           .single();
         if (error) throw error;
@@ -122,6 +126,8 @@ const CompaniesPage: React.FC = () => {
           name: data.name, email: data.email, phone: data.phone,
           industry: data.industry, city: data.city, country: data.country,
           founded_year: data.founded_year, address: data.address,
+          logo_url: data.logo_url?.trim() || null,
+          brand_color: data.brand_color?.trim() || null,
         }).eq('id', editingId);
         if (error) throw error;
         setMessage({ type: 'success', text: 'Company updated successfully' });
@@ -135,6 +141,8 @@ const CompaniesPage: React.FC = () => {
           name: data.name, email: data.email, phone: data.phone,
           industry: data.industry, city: data.city, country: data.country,
           founded_year: data.founded_year, address: data.address,
+          logo_url: data.logo_url?.trim() || null,
+          brand_color: data.brand_color?.trim() || null,
         });
         if (error) throw error;
         setMessage({ type: 'success', text: 'Company added successfully' });
@@ -158,6 +166,7 @@ const CompaniesPage: React.FC = () => {
       name: company.name, email: company.email, phone: company.phone,
       industry: company.industry, city: company.city, country: company.country,
       founded_year: company.founded_year, address: company.address,
+      logo_url: company.logo_url || '', brand_color: company.brand_color || '',
     });
     setEditingId(company.id);
     setShowModal(true);
@@ -373,6 +382,38 @@ const CompaniesPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
             <input {...register('address')} type="text" placeholder="Enter full address" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>}
+          </div>
+
+          {/* Per-company branding — used on payslips, the header, and related areas */}
+          <div className="pt-2 border-t border-gray-200">
+            <p className="text-sm font-semibold text-gray-900 mb-3">Branding <span className="font-normal text-gray-400">(optional)</span></p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Logo URL or data URI</label>
+                <input {...register('logo_url')} type="text" placeholder="https://…/logo.png"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                {errors.logo_url && <p className="mt-1 text-sm text-red-600">{errors.logo_url.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Brand colour</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(colorPreview || '') ? colorPreview! : '#0f172a'}
+                    onChange={(e) => setValue('brand_color', e.target.value, { shouldValidate: true })}
+                    className="h-10 w-12 rounded border border-gray-300 bg-white p-0.5 cursor-pointer" aria-label="Brand colour" />
+                  <input {...register('brand_color')} type="text" placeholder="#0F172A"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                {errors.brand_color && <p className="mt-1 text-sm text-red-600">{errors.brand_color.message}</p>}
+              </div>
+            </div>
+            {logoPreview ? (
+              <div className="mt-3 flex items-center gap-3">
+                <span className="text-xs text-gray-500">Preview:</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logoPreview} alt="Logo preview" className="h-10 w-auto max-w-[160px] object-contain border border-gray-200 rounded bg-white p-1"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              </div>
+            ) : null}
           </div>
         </form>
       </Modal>

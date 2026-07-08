@@ -1022,8 +1022,9 @@ const PayrollPage: React.FC = () => {
 <body>
 
 <!-- HEADER -->
-<div style="background:#111827;color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;">
+<div style="background:${selectedCompany?.brand_color || '#111827'};color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;">
   <div>
+    ${selectedCompany?.logo_url ? `<img src="${selectedCompany.logo_url}" alt="${selectedCompany?.name || ''}" style="max-height:44px;max-width:200px;margin-bottom:8px;object-fit:contain;"/>` : ''}
     <div style="font-size:18px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${selectedCompany?.name || ''}</div>
     ${selectedCompany?.address ? `<div style="color:#d1d5db;font-size:11px;margin-top:3px;">${selectedCompany.address}${selectedCompany.city ? ', ' + selectedCompany.city : ''}${selectedCompany.country ? ', ' + selectedCompany.country : ''}</div>` : ''}
     ${selectedCompany?.phone ? `<div style="color:#d1d5db;font-size:11px;">Tel: ${selectedCompany.phone}</div>` : ''}

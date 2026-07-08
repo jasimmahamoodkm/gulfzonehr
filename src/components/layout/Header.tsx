@@ -54,14 +54,18 @@ const Header: React.FC<HeaderProps> = ({
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo — custom image when configured, otherwise the initials tile */}
+          {/* Logo — the selected company's logo/colour takes priority; falls
+              back to the per-build app logo, then the initials tile. */}
           <Link href="/" className="flex items-center gap-3">
-            {logoUrl ? (
+            {(selectedCompany?.logo_url || logoUrl) ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={BRANDING.shortName} className="h-10 w-auto object-contain" />
+              <img src={selectedCompany?.logo_url || logoUrl!} alt={selectedCompany?.name || BRANDING.shortName} className="h-10 w-auto max-w-[140px] object-contain" />
             ) : (
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">{BRANDING.initials}</span>
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: selectedCompany?.brand_color || '#2563eb' }}>
+                <span className="text-white font-bold text-lg">
+                  {selectedCompany?.name ? selectedCompany.name.slice(0, 2).toUpperCase() : BRANDING.initials}
+                </span>
               </div>
             )}
             <div className="hidden sm:block">

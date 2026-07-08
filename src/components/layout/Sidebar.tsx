@@ -168,7 +168,13 @@ const Sidebar: React.FC = () => {
         {selectedCompany && (
           <div className="px-4 py-3 m-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Current Company</p>
-            <p className="text-sm font-semibold text-gray-900 mt-1">{selectedCompany.name}</p>
+            <div className="flex items-center gap-2 mt-1">
+              {selectedCompany.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selectedCompany.logo_url} alt="" className="h-6 w-auto max-w-[80px] object-contain" />
+              )}
+              <p className="text-sm font-semibold text-gray-900">{selectedCompany.name}</p>
+            </div>
           </div>
         )}
 
