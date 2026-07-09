@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -215,14 +215,17 @@ const AttendancePage: React.FC = () => {
     },
   ];
 
+  // O(1) employee-name lookup for the Employee column (no per-row .find scan).
+  const employeeNameById = useMemo(
+    () => new Map(employees.map((e: any) => [e.id, `${e.first_name} ${e.last_name}`])),
+    [employees]
+  );
+
   const columns = [
     {
       key: 'employee_id',
       label: 'Employee',
-      render: (value: string) => {
-        const emp = employees.find((e) => e.id === value);
-        return emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown';
-      },
+      render: (value: string) => employeeNameById.get(value) || 'Unknown',
     },
     {
       key: 'check_in',

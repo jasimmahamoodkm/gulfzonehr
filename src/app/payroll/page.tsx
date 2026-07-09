@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -898,13 +898,16 @@ const PayrollPage: React.FC = () => {
 
   const fmt = (n: number) => `AED ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // O(1) employee-name lookup for the payroll table (no per-row .find scan).
+  const employeeNameById = useMemo(
+    () => new Map(employees.map((e: any) => [e.id, `${e.first_name} ${e.last_name}`])),
+    [employees]
+  );
+
   const columns = [
     {
       key: 'employee_id', label: 'Employee',
-      render: (value: string) => {
-        const emp = employees.find(e => e.id === value);
-        return emp ? `${emp.first_name} ${emp.last_name}` : '—';
-      },
+      render: (value: string) => employeeNameById.get(value) || '—',
     },
     { key: 'salary', label: 'Basic Salary', render: (v: number) => fmt(v) },
     { key: 'bonus', label: 'Allowances', render: (v: number) => fmt(v) },
