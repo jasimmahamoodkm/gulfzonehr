@@ -87,60 +87,57 @@ const CompaniesPage: React.FC = () => {
 
   const fetchCompanies = useCallback(async () => {
     if (!user) return;
-    try {
-      setLoading(true);
 
+    // One query pass. Throws on a real DB error so the caller can retry —
+    // this self-heals the transient auth-not-ready window (a token refresh in
+    // flight) that otherwise surfaced a spurious "Failed to load companies".
+    const loadOnce = async (): Promise<any[]> => {
       let list: any[] = [];
       if (isSuperAdmin) {
-        // Super Admin: all companies
         const { data, error } = await supabase
-          .from('companies')
-          .select('*')
-          .order('name', { ascending: true });
+          .from('companies').select('*').order('name', { ascending: true });
         if (error) throw error;
         list = data || [];
       } else {
-        // Company Admin: only their assigned company
         const { data: ucData } = await supabase
-          .from('user_companies')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle();
-
+          .from('user_companies').select('company_id')
+          .eq('user_id', user.id).limit(1).maybeSingle();
         const companyId = ucData?.company_id ?? user.company_id;
-        if (!companyId) { setCompanies([]); return; }
-
+        if (!companyId) return [];
         const { data, error } = await supabase
-          .from('companies')
-          .select('*')
-          .eq('id', companyId)
-          .single();
+          .from('companies').select('*').eq('id', companyId).single();
         if (error) throw error;
         list = data ? [data] : [];
       }
-
-      // The stored employee_count column drifts (it isn't updated on add /
-      // archive / delete) — compute the real count from the employees table.
+      // The stored employee_count column drifts — compute the real count.
       const ids = list.map((c) => c.id);
       if (ids.length) {
         const { data: emps } = await supabase
-          .from('employees')
-          .select('company_id')
-          .in('company_id', ids);
+          .from('employees').select('company_id').in('company_id', ids);
         const counts: Record<string, number> = {};
         (emps || []).forEach((e: { company_id: string }) => {
           counts[e.company_id] = (counts[e.company_id] || 0) + 1;
         });
         list = list.map((c) => ({ ...c, employee_count: counts[c.id] || 0 }));
       }
-      setCompanies(list);
-    } catch (err) {
-      console.error('Error fetching companies:', err);
-      setMessage({ type: 'error', text: 'Failed to load companies' });
-    } finally {
-      setLoading(false);
+      return list;
+    };
+
+    setLoading(true);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        setCompanies(await loadOnce());
+        setLoading(false);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 800)); // let auth settle, retry once
+      }
     }
+    console.error('Error fetching companies (after retry):', lastErr);
+    setMessage({ type: 'error', text: 'Failed to load companies' });
+    setLoading(false);
   }, [user, isSuperAdmin]);
 
   useEffect(() => { fetchCompanies(); }, [fetchCompanies]);
