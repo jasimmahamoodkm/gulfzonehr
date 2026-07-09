@@ -305,7 +305,7 @@ export default function PdcPage() {
             <Field label={form.cheque_type === 'payable' ? 'Payee' : 'Drawer / Payer'}><input className={inputCls} value={form.party_name} onChange={e => setForm({ ...form, party_name: e.target.value })} /></Field>
             <Field label="Bank"><input className={inputCls} value={form.bank_name} onChange={e => setForm({ ...form, bank_name: e.target.value })} /></Field>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Amount"><input type="number" min="0" step="0.01" className={inputCls} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></Field>
             <Field label="Currency"><input className={inputCls} value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} /></Field>
             <Field label="Status">

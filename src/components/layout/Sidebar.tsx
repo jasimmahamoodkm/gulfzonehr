@@ -23,6 +23,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
+import { companyBranding } from '@/config/branding';
 import { useAuth } from '@/hooks/useAuth';
 
 // Admin/HR menu items - shown to Super Admin, Company Admin, HR Manager
@@ -68,8 +69,12 @@ const ADMIN_MENU_ITEMS = [
 const Sidebar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Closed by default so mobile loads to content (hamburger opens the drawer).
+  // On desktop the sidebar is always shown via `md:translate-x-0`, so this
+  // only affects the mobile off-canvas state.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { selectedCompany } = useCompany();
+  const companyLogo = companyBranding(selectedCompany?.name).logo;
   const { user } = useAuth();
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/');
@@ -165,7 +170,13 @@ const Sidebar: React.FC = () => {
         {selectedCompany && (
           <div className="px-4 py-3 m-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Current Company</p>
-            <p className="text-sm font-semibold text-gray-900 mt-1">{selectedCompany.name}</p>
+            <div className="flex items-center gap-2 mt-1">
+              {companyLogo && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={companyLogo} alt="" className="h-6 w-auto max-w-[80px] object-contain" />
+              )}
+              <p className="text-sm font-semibold text-gray-900">{selectedCompany.name}</p>
+            </div>
           </div>
         )}
 
@@ -206,6 +217,7 @@ const Sidebar: React.FC = () => {
         <div className="mt-auto p-4 border-t border-gray-200 bg-gray-50 space-y-2">
           <Link
             href="/settings"
+            onClick={() => setSidebarOpen(false)}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors text-left"
           >
             <Settings size={20} />

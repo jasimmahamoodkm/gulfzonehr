@@ -4,11 +4,25 @@
   "organizationName": "GulfZone Group",
   "description": "Comprehensive HR management solution for GulfZone Group",
   "initials": "GZ",
+  "images": {
+    "logo": "/branding/icon-512.png",
+    "favicon": "/branding/icon-192.png"
+  },
   "colors": {
     "primary": "#2563EB",
     "primaryDark": "#1E40AF",
     "themeColor": "#2563EB",
     "background": "#ffffff"
+  },
+  "companyBranding": {
+    "GulfZone": {
+      "logo": "/branding/companies/gulfzone.png",
+      "color": ""
+    },
+    "ALMANAR": {
+      "logo": "/branding/companies/almanar.png",
+      "color": ""
+    }
   },
   "basePath": "/HRportal"
 }

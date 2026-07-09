@@ -1,4 +1,5 @@
 import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
+import { authorizeGrade } from '@/lib/gradeAccess';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,34 +8,6 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
-
-async function getCompanyId(request: NextRequest): Promise<{ companyId: string | null; error: NextResponse | null }> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-  const token = authHeader.substring(7);
-  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-  if (userError || !user) {
-    return { companyId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-  const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
-  const companyId = userData?.company_id ?? null;
-  if (!companyId) {
-    return { companyId: null, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
-  }
-  return { companyId, error: null };
-}
-
-async function verifyGradeOwnership(gradeId: string, companyId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from('employee_grades')
-    .select('id')
-    .eq('id', gradeId)
-    .eq('company_id', companyId)
-    .single();
-  return !!data;
-}
 
 /**
  * Record a salary-change history row for every active employee on a grade.
@@ -76,20 +49,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    // Authorize against the GRADE's company (multi-company safe)
+    const { grade, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const { data, error: dbError } = await supabaseAdmin
       .from('grade_salary_config')
       .select('*')
       .eq('grade_id', gradeId)
-      .eq('company_id', companyId!)
       .order('effective_from', { ascending: false });
 
     if (dbError) {
@@ -107,14 +75,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, userId, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const body = await request.json();
     const { salary, salary_component = 'Basic Salary', currency = 'AED', effective_from, effective_to, notes } = body;
@@ -127,7 +90,8 @@ export async function POST(
       .from('grade_salary_config')
       .insert({
         grade_id: gradeId,
-        company_id: companyId,
+        // Config rows belong to the grade's company, not the caller's.
+        company_id: grade.company_id,
         salary_component: salary_component || 'Basic Salary',
         salary: Number(salary),
         currency,
@@ -142,12 +106,9 @@ export async function POST(
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
-    let usrId: string | undefined;
     try {
-      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
-      usrId = usr?.id;
       const hdrs = Object.fromEntries(request.headers.entries());
-      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'create_salary_config', resource_type: 'grade_salary_config', resource_id: data.id, resource_name: `Salary config for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: grade.company_id, action: 'create_salary_config', resource_type: 'grade_salary_config', resource_id: data.id, resource_name: `Salary config for grade ${grade.name}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
     } catch (_) {}
 
     // Record per-employee salary-change history (prior effective salary -> new)
@@ -159,7 +120,7 @@ export async function POST(
       .order('effective_from', { ascending: false })
       .limit(1);
     await recordGradeSalaryHistory(
-      gradeId, companyId, prior?.[0]?.salary ?? null, Number(salary), currency, effective_from, usrId
+      gradeId, grade.company_id, prior?.[0]?.salary ?? null, Number(salary), currency, effective_from, userId ?? undefined
     );
 
     return NextResponse.json({ data }, { status: 201 });
@@ -173,14 +134,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, userId, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const body = await request.json();
     const { config_id, salary, salary_component, currency, effective_from, effective_to, notes } = body;
@@ -202,7 +158,6 @@ export async function PATCH(
       .update(updates)
       .eq('id', config_id)
       .eq('grade_id', gradeId)
-      .eq('company_id', companyId!)
       .select()
       .single();
 
@@ -211,9 +166,8 @@ export async function PATCH(
     }
 
     try {
-      const { data: { user: usr } } = await supabaseAdmin.auth.getUser(request.headers.get('Authorization')!.substring(7));
       const hdrs = Object.fromEntries(request.headers.entries());
-      await logAuditEvent({ user_id: usr?.id, company_id: companyId!, action: 'update_salary_config', resource_type: 'grade_salary_config', resource_id: data.id, resource_name: `Salary config for grade ${gradeId}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: grade.company_id, action: 'update_salary_config', resource_type: 'grade_salary_config', resource_id: data.id, resource_name: `Salary config for grade ${grade.name}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
     } catch (_) {}
     return NextResponse.json({ data });
   } catch (err) {
@@ -226,14 +180,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id: gradeId } = await params;
-
-    if (!(await verifyGradeOwnership(gradeId, companyId!))) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, error } = await authorizeGrade(request, gradeId);
+    if (error || !grade) return error!;
 
     const { searchParams } = new URL(request.url);
     const configId = searchParams.get('config_id');
@@ -246,8 +195,7 @@ export async function DELETE(
       .from('grade_salary_config')
       .delete()
       .eq('id', configId)
-      .eq('grade_id', gradeId)
-      .eq('company_id', companyId!);
+      .eq('grade_id', gradeId);
 
     if (dbError) {
       return NextResponse.json({ error: dbError.message }, { status: 500 });

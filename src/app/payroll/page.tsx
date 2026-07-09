@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '@/components/layout/Layout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -41,6 +41,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { getEffectiveSalary, getMergedBenefits } from '@/lib/compensation';
 import { apiUrl } from '@/lib/api';
+import { companyBranding } from '@/config/branding';
 
 interface Employee {
   id: string;
@@ -897,13 +898,16 @@ const PayrollPage: React.FC = () => {
 
   const fmt = (n: number) => `AED ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // O(1) employee-name lookup for the payroll table (no per-row .find scan).
+  const employeeNameById = useMemo(
+    () => new Map(employees.map((e: any) => [e.id, `${e.first_name} ${e.last_name}`])),
+    [employees]
+  );
+
   const columns = [
     {
       key: 'employee_id', label: 'Employee',
-      render: (value: string) => {
-        const emp = employees.find(e => e.id === value);
-        return emp ? `${emp.first_name} ${emp.last_name}` : '—';
-      },
+      render: (value: string) => employeeNameById.get(value) || '—',
     },
     { key: 'salary', label: 'Basic Salary', render: (v: number) => fmt(v) },
     { key: 'bonus', label: 'Allowances', render: (v: number) => fmt(v) },
@@ -1006,6 +1010,9 @@ const PayrollPage: React.FC = () => {
         </td>
       </tr>`).join('');
 
+    // Per-company branding from branding.config.json (logo + header colour)
+    const brand = companyBranding(selectedCompany?.name);
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1022,8 +1029,9 @@ const PayrollPage: React.FC = () => {
 <body>
 
 <!-- HEADER -->
-<div style="background:#111827;color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;">
+<div style="background:${brand.color || '#111827'};color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;">
   <div>
+    ${brand.logo ? `<img src="${brand.logo}" alt="${selectedCompany?.name || ''}" style="max-height:44px;max-width:200px;margin-bottom:8px;object-fit:contain;"/>` : ''}
     <div style="font-size:18px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">${selectedCompany?.name || ''}</div>
     ${selectedCompany?.address ? `<div style="color:#d1d5db;font-size:11px;margin-top:3px;">${selectedCompany.address}${selectedCompany.city ? ', ' + selectedCompany.city : ''}${selectedCompany.country ? ', ' + selectedCompany.country : ''}</div>` : ''}
     ${selectedCompany?.phone ? `<div style="color:#d1d5db;font-size:11px;">Tel: ${selectedCompany.phone}</div>` : ''}
@@ -1164,7 +1172,7 @@ ${payslipLeaveBalances.length > 0 ? `
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
               {isEmployee ? 'My Payroll' : 'Payroll Management'}
@@ -1176,7 +1184,7 @@ ${payslipLeaveBalances.length > 0 ? `
             </p>
           </div>
           {isAdmin && (
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button variant="secondary" onClick={() => setShowBatchModal(true)} disabled={!selectedCompany} className="gap-2 disabled:opacity-50">
                 <Users size={20} /> Process All Employees
               </Button>

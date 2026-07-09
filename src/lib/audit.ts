@@ -3,18 +3,23 @@
  * Provides functions for logging audit events and activity
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { supabase as appClient } from '@/lib/supabase';
 import type { CreateAuditLogRequest, AuditLogFilter, AuditLogSearchResult } from '@/types/audit';
 
-// Use service role key so audit inserts bypass RLS.
-// This module is only called from server-side API routes, never from the browser.
-// SUPABASE_SERVICE_ROLE_KEY is intentionally not prefixed with NEXT_PUBLIC_
-// so it is never exposed to the client bundle.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+// Server (API routes): a dedicated service-role client so audit inserts bypass
+// RLS (SUPABASE_SERVICE_ROLE_KEY is never exposed to the client bundle).
+// Browser (pages that log activity): REUSE the app's singleton — creating a
+// second client here shipped a duplicate GoTrueClient (extra auth listeners /
+// storage handling) to every page importing this module.
+const supabase: SupabaseClient =
+  typeof window === 'undefined'
+    ? createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      )
+    : (appClient as SupabaseClient);
 
 /**
  * Log an audit event (called from Supabase function via RPC)

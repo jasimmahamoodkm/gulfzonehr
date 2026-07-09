@@ -5,16 +5,20 @@ import Link from 'next/link';
 import { Menu, X, ChevronDown } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
-import { BRANDING } from '@/config/branding';
+import { BRANDING, brandLogo, companyBranding } from '@/config/branding';
 
 interface HeaderProps {
   userName?: string;
 }
 
+// Custom logo image from branding.config.json, or null → initials tile.
+const logoUrl = brandLogo();
+
 const Header: React.FC<HeaderProps> = ({
   userName = 'User',
 }) => {
   const { selectedCompany, setSelectedCompany, companies } = useCompany();
+  const companyBrand = companyBranding(selectedCompany?.name);
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
@@ -51,11 +55,21 @@ const Header: React.FC<HeaderProps> = ({
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo */}
+          {/* Logo — the selected company's configured logo/colour takes
+              priority (branding.config.json → companyBranding); falls back to
+              the per-build app logo, then the initials tile. */}
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">{BRANDING.initials}</span>
-            </div>
+            {(companyBrand.logo || logoUrl) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={companyBrand.logo || logoUrl!} alt={selectedCompany?.name || BRANDING.shortName} className="h-10 w-auto max-w-[140px] object-contain" />
+            ) : (
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: companyBrand.color || '#2563eb' }}>
+                <span className="text-white font-bold text-lg">
+                  {selectedCompany?.name ? selectedCompany.name.slice(0, 2).toUpperCase() : BRANDING.initials}
+                </span>
+              </div>
+            )}
             <div className="hidden sm:block">
               <h1 className="text-xl font-bold text-gray-900">{BRANDING.shortName}</h1>
               <p className="text-xs text-gray-500">{selectedCompany?.name || 'Select Company'}</p>

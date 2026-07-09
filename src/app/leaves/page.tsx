@@ -203,7 +203,7 @@ const LeavesPage: React.FC = () => {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">My Leaves</h1>
             <p className="text-gray-600 mt-1">

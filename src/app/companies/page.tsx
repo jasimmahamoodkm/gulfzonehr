@@ -12,6 +12,8 @@ import Table from '@/components/ui/Table';
 import { Plus, Edit, Trash2, MapPin, Phone, Mail, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/lib/api';
+import { companyBranding } from '@/config/branding';
 
 const companySchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -46,67 +48,96 @@ const CompaniesPage: React.FC = () => {
   const [companies, setCompanies]     = useState<any[]>([]);
   const [loading, setLoading]         = useState(false);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null); // cache-busted path after upload
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CompanyFormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
   });
+  const companyName = watch('name');
+
+  const uploadLogo = async (file: File) => {
+    const name = (companyName || '').trim();
+    if (!name) { setMessage({ type: 'error', text: 'Enter the company name first, then upload a logo.' }); return; }
+    setLogoUploading(true);
+    setMessage(null);
+    try {
+      const image: string = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result as string);
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      });
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(apiUrl('/api/admin/company-logo'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ company: name, image }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Upload failed');
+      setLogoPreview(`${apiUrl(json.path)}?t=${Date.now()}`);
+      setMessage({ type: 'success', text: `Logo saved (512×512, ${(json.bytes / 1024).toFixed(0)} KB) and written to the config.` });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Logo upload failed' });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const fetchCompanies = useCallback(async () => {
     if (!user) return;
-    try {
-      setLoading(true);
 
+    // One query pass. Throws on a real DB error so the caller can retry —
+    // this self-heals the transient auth-not-ready window (a token refresh in
+    // flight) that otherwise surfaced a spurious "Failed to load companies".
+    const loadOnce = async (): Promise<any[]> => {
       let list: any[] = [];
       if (isSuperAdmin) {
-        // Super Admin: all companies
         const { data, error } = await supabase
-          .from('companies')
-          .select('id,name,email,phone,industry,city,country,founded_year,address,employee_count,created_at')
-          .order('name', { ascending: true });
+          .from('companies').select('*').order('name', { ascending: true });
         if (error) throw error;
         list = data || [];
       } else {
-        // Company Admin: only their assigned company
         const { data: ucData } = await supabase
-          .from('user_companies')
-          .select('company_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle();
-
+          .from('user_companies').select('company_id')
+          .eq('user_id', user.id).limit(1).maybeSingle();
         const companyId = ucData?.company_id ?? user.company_id;
-        if (!companyId) { setCompanies([]); return; }
-
+        if (!companyId) return [];
         const { data, error } = await supabase
-          .from('companies')
-          .select('id,name,email,phone,industry,city,country,founded_year,address,employee_count,created_at')
-          .eq('id', companyId)
-          .single();
+          .from('companies').select('*').eq('id', companyId).single();
         if (error) throw error;
         list = data ? [data] : [];
       }
-
-      // The stored employee_count column drifts (it isn't updated on add /
-      // archive / delete) — compute the real count from the employees table.
+      // The stored employee_count column drifts — compute the real count.
       const ids = list.map((c) => c.id);
       if (ids.length) {
         const { data: emps } = await supabase
-          .from('employees')
-          .select('company_id')
-          .in('company_id', ids);
+          .from('employees').select('company_id').in('company_id', ids);
         const counts: Record<string, number> = {};
         (emps || []).forEach((e: { company_id: string }) => {
           counts[e.company_id] = (counts[e.company_id] || 0) + 1;
         });
         list = list.map((c) => ({ ...c, employee_count: counts[c.id] || 0 }));
       }
-      setCompanies(list);
-    } catch (err) {
-      console.error('Error fetching companies:', err);
-      setMessage({ type: 'error', text: 'Failed to load companies' });
-    } finally {
-      setLoading(false);
+      return list;
+    };
+
+    setLoading(true);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        setCompanies(await loadOnce());
+        setLoading(false);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 800)); // let auth settle, retry once
+      }
     }
+    console.error('Error fetching companies (after retry):', lastErr);
+    setMessage({ type: 'error', text: 'Failed to load companies' });
+    setLoading(false);
   }, [user, isSuperAdmin]);
 
   useEffect(() => { fetchCompanies(); }, [fetchCompanies]);
@@ -160,10 +191,11 @@ const CompaniesPage: React.FC = () => {
       founded_year: company.founded_year, address: company.address,
     });
     setEditingId(company.id);
+    setLogoPreview(companyBranding(company.name).logo);
     setShowModal(true);
   };
 
-  const handleCloseModal = () => { setShowModal(false); setEditingId(null); reset(); setMessage(null); };
+  const handleCloseModal = () => { setShowModal(false); setEditingId(null); reset(); setMessage(null); setLogoPreview(null); };
 
   const deleteCompany = async (id: string) => {
     if (!canDelete) return;
@@ -222,7 +254,7 @@ const CompaniesPage: React.FC = () => {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Companies</h1>
             <p className="text-gray-600 mt-1">
@@ -232,7 +264,7 @@ const CompaniesPage: React.FC = () => {
             </p>
           </div>
           {canCreate && (
-            <Button variant="primary" onClick={() => setShowModal(true)} className="gap-2">
+            <Button variant="primary" onClick={() => { reset(); setEditingId(null); setLogoPreview(null); setShowModal(true); }} className="gap-2">
               <Plus size={20} />
               Add Company
             </Button>
@@ -352,7 +384,7 @@ const CompaniesPage: React.FC = () => {
             <input {...register('industry')} type="text" placeholder="Enter industry" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             {errors.industry && <p className="mt-1 text-sm text-red-600">{errors.industry.message}</p>}
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
               <input {...register('city')} type="text" placeholder="City" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -374,6 +406,33 @@ const CompaniesPage: React.FC = () => {
             <input {...register('address')} type="text" placeholder="Enter full address" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
             {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>}
           </div>
+
+          {/* Company logo — uploaded, compressed to 512×512 PNG, path saved to config */}
+          <div className="pt-2 border-t border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Company Logo <span className="font-normal text-gray-400">(auto-compressed to 512×512)</span>
+            </label>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logoPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoPreview} alt="Company logo" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <span className="text-xs text-gray-400">No logo</span>
+                )}
+              </div>
+              <div>
+                <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  disabled={logoUploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ''; }}
+                  className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:cursor-pointer disabled:opacity-50" />
+                <p className="mt-1 text-xs text-gray-400">
+                  {logoUploading ? 'Uploading & compressing…' : 'PNG, JPG, WebP or SVG. Shown in the header, sidebar and payslips.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
         </form>
       </Modal>
     </Layout>

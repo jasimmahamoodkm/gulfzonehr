@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -119,7 +119,7 @@ const LeaveManagementPage: React.FC = () => {
         // Manager: own + assigned employees
         const { data: empData } = await supabase
           .from('employees')
-          .select('*')
+          .select('id,first_name,last_name')
           .eq('company_id', selectedCompany?.id || '')
           .or(`id.eq.${myEmployeeId},manager_id.eq.${myEmployeeId}`);
         setEmployees(empData || []);
@@ -133,7 +133,7 @@ const LeaveManagementPage: React.FC = () => {
       } else if (selectedCompany) {
         // Admin/HR: all employees' leaves
         const { data: empData } = await supabase
-          .from('employees').select('*').eq('company_id', selectedCompany.id);
+          .from('employees').select('id,first_name,last_name').eq('company_id', selectedCompany.id);
         setEmployees(empData || []);
         const { data: leaveData, error } = await supabase
           .from('leaves').select('*')
@@ -196,14 +196,18 @@ const LeaveManagementPage: React.FC = () => {
   const pendingCount = leaveRequests.filter((l) => l.status === 'Pending').length;
   const approvedCount = leaveRequests.filter((l) => l.status === 'Approved').length;
 
+  // O(1) employee-name lookup for the table's Employee column (avoids a
+  // .find() scan per rendered row).
+  const employeeNameById = useMemo(
+    () => new Map(employees.map((e: any) => [e.id, `${e.first_name} ${e.last_name}`])),
+    [employees]
+  );
+
   const columns = [
     {
       key: 'employee_id',
       label: 'Employee',
-      render: (value: string) => {
-        const emp = employees.find((e) => e.id === value);
-        return emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown';
-      },
+      render: (value: string) => employeeNameById.get(value) || 'Unknown',
     },
     {
       key: 'leave_type',
@@ -255,7 +259,7 @@ const LeaveManagementPage: React.FC = () => {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
               {isEmployee ? 'My Leave' : 'Leave Management'}

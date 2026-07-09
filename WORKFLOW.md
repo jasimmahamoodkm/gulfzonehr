@@ -47,7 +47,7 @@ feature/<name>  ──►  develop  ──►  (tested & final)  ──►  main
 | Hook | Rule |
 |------|------|
 | `pre-commit` | **Rejects direct commits on `main`/`master`.** Work on a branch; `main` only receives merges. |
-| `pre-push` | Runs the **Supabase guard** on every push, and on pushes to `main` runs **`type-check` + production `build`** — a failure blocks the push. |
+| `pre-push` | Runs the **Supabase guard** on every push. Pushes to `main` are **blocked outright** unless explicitly unlocked with `ALLOW_MAIN_PUSH=1` (release time), and even then must pass **`type-check` + production `build`**. |
 
 So a change can only reach `main` after type-check and the production build pass.
 
@@ -91,7 +91,7 @@ git push origin develop
 # When develop is fully tested and approved:
 git checkout main
 git merge --no-ff develop                  # merge commit is allowed on main
-git push origin main                       # pre-push runs full verification
+ALLOW_MAIN_PUSH=1 git push origin main     # explicit unlock + full verification
 git tag v1.3.0 && git push origin v1.3.0   # tag the release
 ```
 Then deploy that tag to the client server with `deploy\windows\deploy.bat`.

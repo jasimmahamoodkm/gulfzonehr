@@ -10,6 +10,7 @@ import {
   Building2,
   Calendar,
   FileWarning,
+  CreditCard,
   Clock,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -28,6 +29,7 @@ const DashboardPage: React.FC = () => {
     { label: 'On Leave Today', value: 0, icon: Calendar, color: 'bg-orange-100 text-orange-600', href: '/attendance' },
     { label: 'Docs Expiring (30d)', value: 0, icon: FileWarning, color: 'bg-amber-100 text-amber-600', href: '/documents?filter=expiring' },
     { label: 'Docs Expired', value: 0, icon: FileWarning, color: 'bg-red-100 text-red-600', href: '/documents?filter=expired' },
+    { label: 'PDC Due (10d)', value: 0, icon: CreditCard, color: 'bg-purple-100 text-purple-600', href: '/documents/pdc' },
   ]);
   const [chartData, setChartData] = useState<{ label: string; count: number }[]>([]);
   const [recentHires, setRecentHires] = useState<any[]>([]);
@@ -43,6 +45,7 @@ const DashboardPage: React.FC = () => {
         const companyId = selectedCompany?.id;
         const today = new Date().toISOString().split('T')[0];
         const in30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+        const in10 = new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0];
 
         // Phase 1 — employees + companies (independent, fetched in parallel)
         let empQuery = supabase
@@ -91,12 +94,21 @@ const DashboardPage: React.FC = () => {
           .limit(5);
         if (companyId) leaveQuery = leaveQuery.in('employee_id', empIdFilter);
 
+        // Pending PDC cheques due within the next 10 days (scoped)
+        let pdcQuery = supabase
+          .from('pdc_cheques')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending')
+          .gte('cheque_date', today).lte('cheque_date', in10);
+        if (companyId) pdcQuery = pdcQuery.eq('company_id', companyId);
+
         const [
           { data: todayAttendance, error: attError },
           { data: expiringDocs },
           { count: expiredCount },
           { data: upcomingLeaves },
-        ] = await Promise.all([attQuery, docQuery, expiredQuery, leaveQuery]);
+          { count: pdcDueCount },
+        ] = await Promise.all([attQuery, docQuery, expiredQuery, leaveQuery, pdcQuery]);
         if (attError) throw attError;
 
         setStats([
@@ -105,6 +117,7 @@ const DashboardPage: React.FC = () => {
           { label: 'On Leave Today', value: todayAttendance?.length || 0, icon: Calendar, color: 'bg-orange-100 text-orange-600', href: '/attendance' },
           { label: 'Docs Expiring (30d)', value: expiringDocs?.length || 0, icon: FileWarning, color: 'bg-amber-100 text-amber-600', href: '/documents?filter=expiring' },
           { label: 'Docs Expired', value: expiredCount || 0, icon: FileWarning, color: 'bg-red-100 text-red-600', href: '/documents?filter=expired' },
+          { label: 'PDC Due (10d)', value: pdcDueCount || 0, icon: CreditCard, color: 'bg-purple-100 text-purple-600', href: '/documents/pdc' },
         ]);
 
         // Recent hires (last 4, from the already-scoped employee list)
@@ -180,7 +193,7 @@ const DashboardPage: React.FC = () => {
         {!loading && (
           <>
         {/* Key Statistics — each tile links to its detail page */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (

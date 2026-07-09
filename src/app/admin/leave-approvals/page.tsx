@@ -112,15 +112,14 @@ export default function LeaveApprovalsPage() {
   };
 
   // Increment used_days in employee_leave_balance when a leave is approved
-  const updateLeaveBalance = async (employeeId: string, leaveTypeName: string, days: number, leaveCompanyId: string) => {
+  const updateLeaveBalance = async (employeeId: string, leaveTypeName: string, days: number) => {
     try {
       const year = new Date().getFullYear();
 
-      // Find the leave_type_id by matching name within the company
+      // Find the leave_type_id by name (leave types are global — shared by all companies)
       const { data: ltData } = await supabase
         .from('leave_types')
         .select('id')
-        .eq('company_id', leaveCompanyId)
         .ilike('name', leaveTypeName)
         .maybeSingle();
 
@@ -178,7 +177,7 @@ export default function LeaveApprovalsPage() {
       // Update employee_leave_balance.used_days for this leave type + year
       const leave = leaves.find(l => l.id === leaveId);
       if (leave) {
-        await updateLeaveBalance(leave.employee_id, leave.leave_type, leave.days, leave.company_id);
+        await updateLeaveBalance(leave.employee_id, leave.leave_type, leave.days);
       }
 
       // Log audit event

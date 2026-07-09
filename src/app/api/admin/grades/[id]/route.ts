@@ -1,4 +1,5 @@
 import { logAuditEvent, getIpAddress, getUserAgent } from '@/lib/audit';
+import { authorizeGrade } from '@/lib/gradeAccess';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,61 +9,20 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-async function getCompanyId(request: NextRequest): Promise<{ companyId: string | null; userId: string | null; error: NextResponse | null }> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return { companyId: null, userId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-  const token = authHeader.substring(7);
-  const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-  if (userError || !user) {
-    return { companyId: null, userId: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-  // Look up company_id from users table, fallback to user_companies (primary)
-  const { data: userData } = await supabaseAdmin.from('users').select('company_id').eq('id', user.id).single();
-  let companyId: string | null = userData?.company_id ?? null;
-
-  if (!companyId) {
-    const { data: ucData } = await supabaseAdmin
-      .from('user_companies')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .eq('is_primary', true)
-      .single();
-    companyId = ucData?.company_id ?? null;
-  }
-
-  if (!companyId) {
-    const { data: anyUc } = await supabaseAdmin
-      .from('user_companies')
-      .select('company_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .single();
-    companyId = anyUc?.company_id ?? null;
-  }
-
-  if (!companyId) {
-    return { companyId: null, userId: user.id, error: NextResponse.json({ error: 'No company associated with user' }, { status: 403 }) };
-  }
-  return { companyId, userId: user.id, error: null };
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id } = await params;
+    // Authorize against the GRADE's company (multi-company safe)
+    const { error } = await authorizeGrade(request, id);
+    if (error) return error;
 
     const { data: grade, error: gradeError } = await supabaseAdmin
       .from('employee_grades')
       .select('*')
       .eq('id', id)
-      .eq('company_id', companyId!)
       .single();
 
     if (gradeError || !grade) {
@@ -85,22 +45,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, userId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id } = await params;
-
-    // Verify ownership
-    const { data: existing } = await supabaseAdmin
-      .from('employee_grades')
-      .select('id')
-      .eq('id', id)
-      .eq('company_id', companyId!)
-      .single();
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, userId, error } = await authorizeGrade(request, id);
+    if (error || !grade) return error!;
 
     const body = await request.json();
     const { name, level, description, active } = body;
@@ -115,7 +62,6 @@ export async function PATCH(
       .from('employee_grades')
       .update(updates)
       .eq('id', id)
-      .eq('company_id', companyId!)
       .select()
       .single();
 
@@ -125,7 +71,7 @@ export async function PATCH(
 
     try {
       const hdrs = Object.fromEntries(request.headers.entries());
-      await logAuditEvent({ user_id: userId ?? undefined, company_id: companyId!, action: 'update_grade', resource_type: 'employee_grades', resource_id: data.id, resource_name: data.name, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: grade.company_id, action: 'update_grade', resource_type: 'employee_grades', resource_id: data.id, resource_name: data.name, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
     } catch (_) {}
     return NextResponse.json({ data });
   } catch (err) {
@@ -138,28 +84,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { companyId, userId, error } = await getCompanyId(request);
-    if (error) return error;
-
     const { id } = await params;
-
-    // Verify ownership before delete
-    const { data: existing } = await supabaseAdmin
-      .from('employee_grades')
-      .select('id')
-      .eq('id', id)
-      .eq('company_id', companyId!)
-      .single();
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Grade not found' }, { status: 404 });
-    }
+    const { grade, userId, error } = await authorizeGrade(request, id);
+    if (error || !grade) return error!;
 
     const { error: dbError } = await supabaseAdmin
       .from('employee_grades')
       .delete()
-      .eq('id', id)
-      .eq('company_id', companyId!);
+      .eq('id', id);
 
     if (dbError) {
       return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -167,7 +99,7 @@ export async function DELETE(
 
     try {
       const hdrs = Object.fromEntries(request.headers.entries());
-      await logAuditEvent({ user_id: userId ?? undefined, company_id: companyId!, action: 'delete_grade', resource_type: 'employee_grades', resource_id: id as any, resource_name: `Grade ${id}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
+      await logAuditEvent({ user_id: userId ?? undefined, company_id: grade.company_id, action: 'delete_grade', resource_type: 'employee_grades', resource_id: id as any, resource_name: `Grade ${grade.name}`, status: 'success', ip_address: getIpAddress(hdrs), user_agent: getUserAgent(hdrs) });
     } catch (_) {}
     return NextResponse.json({ success: true });
   } catch (err) {
