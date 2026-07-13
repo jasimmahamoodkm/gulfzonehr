@@ -95,7 +95,21 @@ runs locally.
 
 ---
 
-## Moving your real cloud data in (optional, when ready)
+## Migrate real cloud data in (one command)
+Bring the real `public` data + `auth` users/passwords from a Supabase cloud
+project into the local stack:
+```bash
+# URL from Supabase → Project Settings → Database → Connection string → "Session pooler"
+deploy/selfhost/migrate-from-cloud.sh \
+  'postgresql://postgres.<ref>:<DB-PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres'
+```
+It dumps the cloud (via the db container), replaces the local seed data, reloads
+grants, and verifies counts. Then log in with any real user's email + password.
+If a specific user can't log in (GoTrue version differences between projects),
+reset just that one from Studio → Authentication. Storage *files* are separate —
+see below.
+
+## Moving your real cloud data in (manual / alternative)
 Instead of the seed, migrate the actual data:
 ```bash
 # from the cloud project (get the connection string from Supabase → Settings → Database)
