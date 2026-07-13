@@ -46,3 +46,6 @@ Thumbs.db
 *.temp
 *.bak
 .vercel
+
+# Self-hosted Supabase stack (cloned locally for trial/deploy)
+/supabase/

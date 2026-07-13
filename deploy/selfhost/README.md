@@ -56,14 +56,20 @@ the 117 RLS policies, helper functions, storage bucket, and seed data):
 docker exec -i supabase-db psql -U postgres -d postgres \
   < deploy/gulfzone_hr_deployment.sql
 ```
-(Container name may differ — check `docker compose ps`; it's the `db` service.)
+(Container name may differ — check `docker-compose ps`; it's the `db` service.)
+
+## 4b. Grant the API roles access (REQUIRED on self-hosted)
+The cloud does this automatically; a self-hosted stack does not — without it the
+app fails with `permission denied for function get_my_company_id`.
+```bash
+docker exec -i supabase-db psql -U postgres -d postgres < deploy/selfhost/grants.sql
+```
 
 ## 5. Create a Super Admin login
 A fresh stack has no auth users yet. Create one and wire it to a company:
 ```bash
 # from the GulfZone repo root
 SERVICE_ROLE_KEY='<service key from step 2>' \
-POSTGRES_PASSWORD='<postgres password from step 2>' \
   node deploy/selfhost/seed-login.mjs
 ```
 Prints an email + password to log in with (default `admin@local.test` / `Admin@12345`).
