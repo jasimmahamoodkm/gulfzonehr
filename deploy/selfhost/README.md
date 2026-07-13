@@ -9,11 +9,18 @@ Everything below is a one-time setup. Budget ~30–45 min (mostly image download
 ---
 
 ## 0. Prerequisites
-- **Docker** running on the Mac. Free options: **OrbStack** (lightest, recommended
-  on Apple Silicon) or **Colima** (`brew install colima docker docker-compose && colima start`)
-  or Docker Desktop.
-- `git`, `node` (already have), and `psql` (`brew install libpq` then add to PATH,
-  or use the container's psql — see step 4).
+- **Docker** running on the Mac. Free options: **OrbStack** (lightest on Apple
+  Silicon) or **Colima** (`brew install colima docker docker-compose`).
+- **Give the VM enough resources** — the Supabase stack is ~10 containers and
+  needs ≥4 GB RAM (2 GB will OOM). On Colima:
+  ```bash
+  colima stop 2>/dev/null; colima start --cpu 4 --memory 8
+  ```
+- **Compose command:** if `docker compose version` errors, you have the
+  standalone binary — use **`docker-compose`** (hyphen) everywhere below instead
+  of `docker compose` (space).
+- `git`, `node` (already have). `psql` is optional — the steps use the DB
+  container's psql.
 
 ## 1. Get the Supabase docker stack
 ```bash
@@ -35,9 +42,10 @@ default ports (API gateway on **8000**, Postgres on **5432**).
 
 ## 3. Start the stack
 ```bash
-docker compose up -d      # first run pulls ~1–2 GB of images
-docker compose ps         # wait until all services are "healthy"
+docker-compose up -d      # (or `docker compose up -d` if you have the plugin)
+docker-compose ps         # wait until all services are "healthy"
 ```
+First run pulls ~1–2 GB of images.
 Studio (admin UI) is now at **http://localhost:8000** (Postgres at `localhost:5432`).
 
 ## 4. Load the schema + seed
@@ -104,8 +112,8 @@ Schedule that nightly (cron on Mac, Task Scheduler on the client Windows PC).
 
 ## Teardown
 ```bash
-cd supabase/docker && docker compose down        # keep data
-docker compose down -v                            # delete data volumes too
+cd supabase/docker && docker-compose down         # keep data
+docker-compose down -v                            # delete data volumes too
 ```
 
 ## Notes for the client Windows PC (later)
