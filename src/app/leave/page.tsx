@@ -377,7 +377,7 @@ const LeaveManagementPage: React.FC = () => {
           setMessage(null);
         }}
         title="New Leave Request"
-        size="md"
+        size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => {
@@ -409,7 +409,7 @@ const LeaveManagementPage: React.FC = () => {
             <select
               {...register('employee_id')}
               disabled={isEmployee}
-              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`w-full px-4 py-2.5 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
                 isEmployee ? 'bg-gray-100 cursor-not-allowed' : ''
               }`}
             >
@@ -432,7 +432,7 @@ const LeaveManagementPage: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">Leave Type</label>
             <select
               {...register('leave_type')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2.5 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="">Select Leave Type</option>
               <option value="Vacation">Vacation</option>
