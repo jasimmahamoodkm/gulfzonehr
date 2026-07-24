@@ -1490,3 +1490,17 @@ DROP POLICY IF EXISTS leave_types_read ON public.leave_types;
 CREATE POLICY leave_types_read ON public.leave_types
   FOR SELECT TO public
   USING ((select auth.uid()) IS NOT NULL);
+
+-- ──── migrations/028_payroll_adjustment.sql ────
+-- Migration 028: manual payroll adjustment.
+--
+-- When generating payroll, an admin can add or deduct an extra amount beyond
+-- the preset grade benefits for that month (e.g. a one-off bonus, an advance
+-- recovery), with a short description shown on the payslip.
+--
+--   adjustment      signed amount: positive = addition, negative = deduction
+--   adjustment_note short description shown on the payslip
+-- Idempotent — safe to re-run.
+
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS adjustment numeric(12,2) DEFAULT 0;
+ALTER TABLE public.payroll ADD COLUMN IF NOT EXISTS adjustment_note varchar;

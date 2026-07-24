@@ -138,6 +138,10 @@ const PayrollPage: React.FC = () => {
   const [basicSalary, setBasicSalary] = useState<number>(0);
   const [benefitLines, setBenefitLines] = useState<BenefitLine[]>([]);
   const [deductions, setDeductions] = useState<number>(0);
+  // Manual one-off adjustment beyond preset benefits (add or deduct + note)
+  const [adjustmentType, setAdjustmentType] = useState<'add' | 'deduct'>('add');
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
+  const [adjustmentNote, setAdjustmentNote] = useState('');
   const [loadingBenefits, setLoadingBenefits] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalanceLine[]>([]);
@@ -241,7 +245,10 @@ const PayrollPage: React.FC = () => {
     .filter(b => b.included)
     .reduce((sum, b) => sum + b.computed_amount, 0);
 
-  const netPay = basicSalary + totalAllowances - deductions - leaveDeductionAmount;
+  // Signed manual adjustment: positive adds to pay, negative deducts.
+  const adjustmentSigned = (adjustmentType === 'add' ? 1 : -1) * (adjustmentAmount || 0);
+
+  const netPay = basicSalary + totalAllowances + adjustmentSigned - deductions - leaveDeductionAmount;
 
   // ── Data fetching ──────────────────────────────────────────────
 
@@ -260,7 +267,7 @@ const PayrollPage: React.FC = () => {
 
         const { data: payData, error } = await supabase
           .from('payroll')
-          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at')
+          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at,leave_deduction_days,leave_deduction_amount,adjustment,adjustment_note')
           .eq('employee_id', currentEmployeeId)
           .eq('month', selectedMonth)
           .order('created_at', { ascending: false });
@@ -281,7 +288,7 @@ const PayrollPage: React.FC = () => {
 
         const { data: payData, error } = await supabase
           .from('payroll')
-          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at')
+          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at,leave_deduction_days,leave_deduction_amount,adjustment,adjustment_note')
           .in('employee_id', empIds)
           .eq('month', selectedMonth)
           .order('created_at', { ascending: false });
@@ -741,11 +748,18 @@ const PayrollPage: React.FC = () => {
         salary: basicSalary,
         bonus: totalAllowances,
         deductions: totalDeductions,
-        net_pay: basicSalary + totalAllowances - totalDeductions,
+        net_pay: basicSalary + totalAllowances + adjustmentSigned - totalDeductions,
         leave_deduction_days: leaveDeductionDays + leaveDeductionUnauthorized,
         leave_deduction_amount: leaveDeductionAmount,
         status: 'Processed',
       };
+
+      // Only send the adjustment fields when actually used (keeps the insert
+      // working against databases that haven't applied migration 028 yet).
+      if (adjustmentSigned !== 0) {
+        insertPayload.adjustment = adjustmentSigned;
+        insertPayload.adjustment_note = adjustmentNote.trim() || null;
+      }
 
       if (selectedCompany?.id) insertPayload.company_id = selectedCompany.id;
 
@@ -802,6 +816,9 @@ const PayrollPage: React.FC = () => {
     setLeaveDeductionDays(0);
     setLeaveDeductionUnauthorized(0);
     setLeaveDeductionAmount(0);
+    setAdjustmentType('add');
+    setAdjustmentAmount(0);
+    setAdjustmentNote('');
   };
 
   // ── Delete payroll record ──────────────────────────────────────
@@ -975,7 +992,9 @@ const PayrollPage: React.FC = () => {
     const emp = employees.find(e => e.id === payslipRecord.employee_id);
     const includedLines = payslipLines.filter((b: any) => b.included);
     const monthLabel = new Date(payslipRecord.month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' });
-    const totalEarnings = payslipRecord.salary + payslipRecord.bonus;
+    const adj = payslipRecord.adjustment || 0;
+    const adjNote = payslipRecord.adjustment_note ? ` (${payslipRecord.adjustment_note})` : '';
+    const totalEarnings = payslipRecord.salary + payslipRecord.bonus + Math.max(adj, 0);
     const payDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 
     const fmtNum = (n: number) =>
@@ -985,7 +1004,12 @@ const PayrollPage: React.FC = () => {
       <tr>
         <td style="padding:6px 12px;color:#374151;">${b.benefit_type}${b.value_type === 'percentage' ? ` (${b.benefit_value}%)` : ''}</td>
         <td style="padding:6px 12px;text-align:right;color:#1f2937;">${fmtNum(b.computed_amount)}</td>
-      </tr>`).join('');
+      </tr>`).join('')
+      + (adj > 0 ? `
+      <tr>
+        <td style="padding:6px 12px;color:#374151;">Adjustment<small style="color:#9ca3af;">${adjNote}</small></td>
+        <td style="padding:6px 12px;text-align:right;color:#15803d;">${fmtNum(adj)}</td>
+      </tr>` : '');
 
     const deductionRows = payslipRecord.deductions > 0 ? `
       ${payslipRecord.leave_deduction_amount > 0 ? `
@@ -998,7 +1022,15 @@ const PayrollPage: React.FC = () => {
         <td style="padding:6px 12px;color:#374151;">Other Deductions</td>
         <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0))}</td>
       </tr>` : ''}
-    ` : `<tr><td colspan="2" style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;">No deductions</td></tr>`;
+    ` : '';
+    const adjDeductionRow = adj < 0 ? `
+      <tr>
+        <td style="padding:6px 12px;color:#374151;">Adjustment<small style="color:#9ca3af;">${adjNote}</small></td>
+        <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(Math.abs(adj))}</td>
+      </tr>` : '';
+    const allDeductionRows = (deductionRows + adjDeductionRow) ||
+      `<tr><td colspan="2" style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;">No deductions</td></tr>`;
+    const totalDeductionsPrint = (payslipRecord.deductions || 0) + Math.abs(Math.min(adj, 0));
 
     const leaveRows = payslipLeaveBalances.map((lb: any) => `
       <tr style="${lb.excess_days > 0 ? 'background:#fef2f2;' : ''}">
@@ -1108,11 +1140,11 @@ const PayrollPage: React.FC = () => {
             <th style="text-align:right;padding:6px 12px;color:#9ca3af;font-weight:500;">Amount (AED)</th>
           </tr>
         </thead>
-        <tbody style="border-bottom:1px solid #e5e7eb;">${deductionRows}</tbody>
+        <tbody style="border-bottom:1px solid #e5e7eb;">${allDeductionRows}</tbody>
         <tfoot>
           <tr style="background:#111827;color:#fff;">
             <td style="padding:9px 12px;font-weight:700;">Total Deductions</td>
-            <td style="padding:9px 12px;text-align:right;font-weight:700;">${fmtNum(payslipRecord.deductions)}</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:700;">${fmtNum(totalDeductionsPrint)}</td>
           </tr>
         </tfoot>
       </table>
@@ -1130,7 +1162,7 @@ const PayrollPage: React.FC = () => {
     <div style="color:#9ca3af;">Gross Earnings</div>
     <div style="font-weight:600;">${fmtNum(totalEarnings)}</div>
     <div style="color:#9ca3af;margin-top:6px;">Total Deductions</div>
-    <div style="font-weight:600;color:#fca5a5;">- ${fmtNum(payslipRecord.deductions)}</div>
+    <div style="font-weight:600;color:#fca5a5;">- ${fmtNum(totalDeductionsPrint)}</div>
   </div>
 </div>
 
@@ -1461,6 +1493,42 @@ ${payslipLeaveBalances.length > 0 ? `
                   />
                 </div>
 
+                {/* Manual one-off adjustment (beyond preset benefits) */}
+                <div className="px-4 py-3 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-700">Extra Adjustment</span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={adjustmentType}
+                        onChange={e => setAdjustmentType(e.target.value as 'add' | 'deduct')}
+                        className="px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="add">Add (+)</option>
+                        <option value="deduct">Deduct (−)</option>
+                      </select>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={adjustmentAmount || ''}
+                        onChange={e => setAdjustmentAmount(Math.abs(parseFloat(e.target.value) || 0))}
+                        placeholder="0.00"
+                        className={`w-28 text-right px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${adjustmentType === 'add' ? 'text-green-700' : 'text-red-600'}`}
+                      />
+                    </div>
+                  </div>
+                  {adjustmentAmount > 0 && (
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={adjustmentNote}
+                      onChange={e => setAdjustmentNote(e.target.value)}
+                      placeholder="Short description (e.g. performance bonus, advance recovery)"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  )}
+                </div>
+
                 {/* Net Pay */}
                 <div className="px-4 py-3 flex items-center justify-between bg-green-50">
                   <span className="text-sm font-bold text-green-900">Net Pay</span>
@@ -1631,12 +1699,32 @@ ${payslipLeaveBalances.length > 0 ? `
                       <span className="text-sm text-gray-800">{fmt(b.computed_amount)}</span>
                     </div>
                   ))}
+                  {(payslipRecord.adjustment || 0) > 0 && (
+                    <div className="flex justify-between px-4 py-2.5">
+                      <span className="text-sm text-gray-700">
+                        Adjustment
+                        {payslipRecord.adjustment_note && <span className="text-xs text-gray-400 ml-1">({payslipRecord.adjustment_note})</span>}
+                      </span>
+                      <span className="text-sm font-semibold text-green-700">{fmt(payslipRecord.adjustment)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between px-4 py-2.5 bg-blue-50">
                     <span className="text-sm font-semibold text-blue-800">Total Earnings</span>
-                    <span className="text-sm font-semibold text-blue-800">{fmt(payslipRecord.salary + payslipRecord.bonus)}</span>
+                    <span className="text-sm font-semibold text-blue-800">{fmt(payslipRecord.salary + payslipRecord.bonus + Math.max(payslipRecord.adjustment || 0, 0))}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Negative adjustment shown alongside deductions */}
+              {(payslipRecord.adjustment || 0) < 0 && (
+                <div className="flex justify-between px-4 py-2.5 border border-red-100 bg-red-50 rounded-lg">
+                  <span className="text-sm text-gray-700">
+                    Adjustment (deduction)
+                    {payslipRecord.adjustment_note && <span className="text-xs text-gray-400 ml-1">({payslipRecord.adjustment_note})</span>}
+                  </span>
+                  <span className="text-sm font-semibold text-red-600">− {fmt(Math.abs(payslipRecord.adjustment))}</span>
+                </div>
+              )}
 
               {/* Deductions */}
               {payslipRecord.deductions > 0 && (
