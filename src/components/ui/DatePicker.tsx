@@ -31,7 +31,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
   const [displayValue, setDisplayValue] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 320 });
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -71,7 +71,11 @@ const DatePicker: React.FC<DatePickerProps> = ({
     const dropdownHeight = 450; // Approximate height of dropdown
     const spaceBelow = window.innerHeight - rect.bottom;
     const top = spaceBelow > dropdownHeight ? rect.bottom + 8 : rect.top - dropdownHeight - 8;
-    setDropdownPos({ top: Math.max(8, top), left: rect.left });
+    // Clamp horizontally so the panel never overflows the viewport (e.g. the
+    // "To Date" field in a two-column row on a phone).
+    const width = Math.min(320, window.innerWidth - 16);
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+    setDropdownPos({ top: Math.max(8, top), left, width });
   };
 
   const toggleOpen = () => {
@@ -119,10 +123,11 @@ const DatePicker: React.FC<DatePickerProps> = ({
       {isOpen && !disabled && (
         <div
           ref={dropdownRef}
-          className="fixed bg-white border border-gray-300 rounded-lg shadow-2xl p-4 w-80"
+          className="fixed bg-white border border-gray-300 rounded-lg shadow-2xl p-4"
           style={{
             top: `${dropdownPos.top}px`,
             left: `${dropdownPos.left}px`,
+            width: `${dropdownPos.width}px`,
             zIndex: 9999,
           }}
         >
