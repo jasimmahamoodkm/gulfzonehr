@@ -51,3 +51,23 @@
   .bg-gray-900 { background-color: #111827 !important; }
   .bg-gray-50  { background-color: #f9fafb !important; }
 }
+/* ── Consistent <select> sizing across every page and form ──────────────
+   Native selects render their option popup at the OS's own size, which on
+   mobile looked cramped next to the box. We cannot style that popup, but we
+   CAN make every select box itself consistent and touch-friendly:
+   16px text also stops iOS Safari from zooming the page on focus.
+   Forms needing a fully styled list use <SelectMenu> instead.            */
+select {
+  font-size: 16px;
+  min-height: 42px;
+  line-height: 1.4;
+  background-color: #fff;
+}
+select:disabled {
+  background-color: #f3f4f6;
+}
+/* Small, dense selects (inline table/row controls) opt out via .select-sm */
+select.select-sm {
+  font-size: 14px;
+  min-height: 34px;
+}

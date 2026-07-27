@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       employee_id, month, salary, bonus, deductions,
       net_pay, status, company_id,
       leave_deduction_days, leave_deduction_amount,
-      adjustment, adjustment_note,
+      adjustment, adjustment_note, adjustments,
     } = body;
 
     if (!employee_id || !month || salary === undefined || net_pay === undefined) {
@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
       // Manual one-off adjustment (migration 028) — only sent when used
       if (adjustment !== undefined) payload.adjustment = adjustment;
       if (adjustment_note !== undefined) payload.adjustment_note = adjustment_note;
+      if (adjustments !== undefined) payload.adjustments = adjustments;
 
       const { data, error: dbError } = await supabaseAdmin
         .from('payroll')

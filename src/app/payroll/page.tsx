@@ -8,6 +8,32 @@ import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import { Plus, Download, Calendar, Info, Plane, Users, CheckCircle, XCircle, SkipForward, Trash2 } from 'lucide-react';
 
+/**
+ * Adjustment lines for a payroll record. Reads the `adjustments` JSON array
+ * (migration 029) and falls back to the single `adjustment`/`adjustment_note`
+ * pair (migration 028) so older records still render correctly.
+ */
+type PayslipAdjustment = { type: 'add' | 'deduct'; amount: number; note: string };
+const parseAdjustments = (record: any): PayslipAdjustment[] => {
+  const raw = record?.adjustments;
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw
+      .map((a: any) => ({
+        type: (a?.type === 'deduct' ? 'deduct' : 'add') as 'add' | 'deduct',
+        amount: Math.abs(Number(a?.amount) || 0),
+        note: a?.note || '',
+      }))
+      .filter(a => a.amount > 0);
+  }
+  const legacy = Number(record?.adjustment) || 0;
+  if (legacy === 0) return [];
+  return [{
+    type: legacy > 0 ? 'add' : 'deduct',
+    amount: Math.abs(legacy),
+    note: record?.adjustment_note || '',
+  }];
+};
+
 // ── Universal month/year selector (works in all browsers) ──────────────────
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -138,10 +164,18 @@ const PayrollPage: React.FC = () => {
   const [basicSalary, setBasicSalary] = useState<number>(0);
   const [benefitLines, setBenefitLines] = useState<BenefitLine[]>([]);
   const [deductions, setDeductions] = useState<number>(0);
-  // Manual one-off adjustment beyond preset benefits (add or deduct + note)
-  const [adjustmentType, setAdjustmentType] = useState<'add' | 'deduct'>('add');
-  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
-  const [adjustmentNote, setAdjustmentNote] = useState('');
+  // Manual one-off adjustments beyond preset benefits — any number of
+  // add/deduct lines, each with its own short description.
+  type AdjustmentLine = { id: string; type: 'add' | 'deduct'; amount: number; note: string };
+  const [adjustments, setAdjustments] = useState<AdjustmentLine[]>([]);
+
+  const newAdjustmentId = () => `adj_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const addAdjustmentRow = () =>
+    setAdjustments(rows => [...rows, { id: newAdjustmentId(), type: 'add', amount: 0, note: '' }]);
+  const removeAdjustmentRow = (id: string) =>
+    setAdjustments(rows => rows.filter(r => r.id !== id));
+  const updateAdjustmentRow = (id: string, patch: Partial<AdjustmentLine>) =>
+    setAdjustments(rows => rows.map(r => (r.id === id ? { ...r, ...patch } : r)));
   const [loadingBenefits, setLoadingBenefits] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalanceLine[]>([]);
@@ -245,8 +279,10 @@ const PayrollPage: React.FC = () => {
     .filter(b => b.included)
     .reduce((sum, b) => sum + b.computed_amount, 0);
 
-  // Signed manual adjustment: positive adds to pay, negative deducts.
-  const adjustmentSigned = (adjustmentType === 'add' ? 1 : -1) * (adjustmentAmount || 0);
+  // Signed net of all manual adjustment lines: positive adds, negative deducts.
+  const validAdjustments = adjustments.filter(a => (a.amount || 0) > 0);
+  const adjustmentSigned = validAdjustments.reduce(
+    (sum, a) => sum + (a.type === 'add' ? 1 : -1) * (a.amount || 0), 0);
 
   const netPay = basicSalary + totalAllowances + adjustmentSigned - deductions - leaveDeductionAmount;
 
@@ -267,7 +303,7 @@ const PayrollPage: React.FC = () => {
 
         const { data: payData, error } = await supabase
           .from('payroll')
-          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at,leave_deduction_days,leave_deduction_amount,adjustment,adjustment_note')
+          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at,leave_deduction_days,leave_deduction_amount,adjustment,adjustment_note,adjustments')
           .eq('employee_id', currentEmployeeId)
           .eq('month', selectedMonth)
           .order('created_at', { ascending: false });
@@ -288,7 +324,7 @@ const PayrollPage: React.FC = () => {
 
         const { data: payData, error } = await supabase
           .from('payroll')
-          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at,leave_deduction_days,leave_deduction_amount,adjustment,adjustment_note')
+          .select('id,employee_id,month,salary,bonus,deductions,net_pay,status,created_at,leave_deduction_days,leave_deduction_amount,adjustment,adjustment_note,adjustments')
           .in('employee_id', empIds)
           .eq('month', selectedMonth)
           .order('created_at', { ascending: false });
@@ -756,9 +792,13 @@ const PayrollPage: React.FC = () => {
 
       // Only send the adjustment fields when actually used (keeps the insert
       // working against databases that haven't applied migration 028 yet).
-      if (adjustmentSigned !== 0) {
+      if (validAdjustments.length > 0) {
         insertPayload.adjustment = adjustmentSigned;
-        insertPayload.adjustment_note = adjustmentNote.trim() || null;
+        insertPayload.adjustment_note =
+          validAdjustments.map(a => a.note.trim()).filter(Boolean).join('; ') || null;
+        insertPayload.adjustments = validAdjustments.map(a => ({
+          type: a.type, amount: a.amount, note: a.note.trim() || null,
+        }));
       }
 
       if (selectedCompany?.id) insertPayload.company_id = selectedCompany.id;
@@ -816,9 +856,7 @@ const PayrollPage: React.FC = () => {
     setLeaveDeductionDays(0);
     setLeaveDeductionUnauthorized(0);
     setLeaveDeductionAmount(0);
-    setAdjustmentType('add');
-    setAdjustmentAmount(0);
-    setAdjustmentNote('');
+    setAdjustments([]);
   };
 
   // ── Delete payroll record ──────────────────────────────────────
@@ -992,9 +1030,12 @@ const PayrollPage: React.FC = () => {
     const emp = employees.find(e => e.id === payslipRecord.employee_id);
     const includedLines = payslipLines.filter((b: any) => b.included);
     const monthLabel = new Date(payslipRecord.month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' });
-    const adj = payslipRecord.adjustment || 0;
-    const adjNote = payslipRecord.adjustment_note ? ` (${payslipRecord.adjustment_note})` : '';
-    const totalEarnings = payslipRecord.salary + payslipRecord.bonus + Math.max(adj, 0);
+    const printAdjustments = parseAdjustments(payslipRecord);
+    const adjAdditions = printAdjustments.filter(a => a.type === 'add');
+    const adjDeductions = printAdjustments.filter(a => a.type === 'deduct');
+    const adjAddTotal = adjAdditions.reduce((s, a) => s + a.amount, 0);
+    const adjDeductTotal = adjDeductions.reduce((s, a) => s + a.amount, 0);
+    const totalEarnings = payslipRecord.salary + payslipRecord.bonus + adjAddTotal;
     const payDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 
     const fmtNum = (n: number) =>
@@ -1005,11 +1046,11 @@ const PayrollPage: React.FC = () => {
         <td style="padding:6px 12px;color:#374151;">${b.benefit_type}${b.value_type === 'percentage' ? ` (${b.benefit_value}%)` : ''}</td>
         <td style="padding:6px 12px;text-align:right;color:#1f2937;">${fmtNum(b.computed_amount)}</td>
       </tr>`).join('')
-      + (adj > 0 ? `
+      + adjAdditions.map(a => `
       <tr>
-        <td style="padding:6px 12px;color:#374151;">Adjustment<small style="color:#9ca3af;">${adjNote}</small></td>
-        <td style="padding:6px 12px;text-align:right;color:#15803d;">${fmtNum(adj)}</td>
-      </tr>` : '');
+        <td style="padding:6px 12px;color:#374151;">${a.note || 'Adjustment'}</td>
+        <td style="padding:6px 12px;text-align:right;color:#15803d;">${fmtNum(a.amount)}</td>
+      </tr>`).join('');
 
     const deductionRows = payslipRecord.deductions > 0 ? `
       ${payslipRecord.leave_deduction_amount > 0 ? `
@@ -1023,14 +1064,14 @@ const PayrollPage: React.FC = () => {
         <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0))}</td>
       </tr>` : ''}
     ` : '';
-    const adjDeductionRow = adj < 0 ? `
+    const adjDeductionRows = adjDeductions.map(a => `
       <tr>
-        <td style="padding:6px 12px;color:#374151;">Adjustment<small style="color:#9ca3af;">${adjNote}</small></td>
-        <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(Math.abs(adj))}</td>
-      </tr>` : '';
-    const allDeductionRows = (deductionRows + adjDeductionRow) ||
+        <td style="padding:6px 12px;color:#374151;">${a.note || 'Adjustment'}</td>
+        <td style="padding:6px 12px;text-align:right;color:#dc2626;">${fmtNum(a.amount)}</td>
+      </tr>`).join('');
+    const allDeductionRows = (deductionRows + adjDeductionRows) ||
       `<tr><td colspan="2" style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;">No deductions</td></tr>`;
-    const totalDeductionsPrint = (payslipRecord.deductions || 0) + Math.abs(Math.min(adj, 0));
+    const totalDeductionsPrint = (payslipRecord.deductions || 0) + adjDeductTotal;
 
     const leaveRows = payslipLeaveBalances.map((lb: any) => `
       <tr style="${lb.excess_days > 0 ? 'background:#fef2f2;' : ''}">
@@ -1493,40 +1534,64 @@ ${payslipLeaveBalances.length > 0 ? `
                   />
                 </div>
 
-                {/* Manual one-off adjustment (beyond preset benefits) */}
-                <div className="px-4 py-3 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-gray-700">Extra Adjustment</span>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={adjustmentType}
-                        onChange={e => setAdjustmentType(e.target.value as 'add' | 'deduct')}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value="add">Add (+)</option>
-                        <option value="deduct">Deduct (−)</option>
-                      </select>
+                {/* Manual one-off adjustments (beyond preset benefits) */}
+                <div className="px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Extra Adjustments</span>
+                    {adjustments.length > 0 && (
+                      <span className={`text-sm font-semibold ${adjustmentSigned >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {adjustmentSigned >= 0 ? '+' : '−'} {fmt(Math.abs(adjustmentSigned))}
+                      </span>
+                    )}
+                  </div>
+
+                  {adjustments.map((row) => (
+                    <div key={row.id} className="space-y-2 rounded-lg border border-gray-200 p-2.5">
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={row.type}
+                          onChange={e => updateAdjustmentRow(row.id, { type: e.target.value as 'add' | 'deduct' })}
+                          className="select-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="add">Add (+)</option>
+                          <option value="deduct">Deduct (−)</option>
+                        </select>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={row.amount || ''}
+                          onChange={e => updateAdjustmentRow(row.id, { amount: Math.abs(parseFloat(e.target.value) || 0) })}
+                          placeholder="0.00"
+                          className={`flex-1 min-w-0 text-right px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${row.type === 'add' ? 'text-green-700' : 'text-red-600'}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAdjustmentRow(row.id)}
+                          title="Remove this adjustment"
+                          className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                       <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={adjustmentAmount || ''}
-                        onChange={e => setAdjustmentAmount(Math.abs(parseFloat(e.target.value) || 0))}
-                        placeholder="0.00"
-                        className={`w-28 text-right px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${adjustmentType === 'add' ? 'text-green-700' : 'text-red-600'}`}
+                        type="text"
+                        maxLength={120}
+                        value={row.note}
+                        onChange={e => updateAdjustmentRow(row.id, { note: e.target.value })}
+                        placeholder="Short description (e.g. performance bonus, advance recovery)"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
-                  </div>
-                  {adjustmentAmount > 0 && (
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={adjustmentNote}
-                      onChange={e => setAdjustmentNote(e.target.value)}
-                      placeholder="Short description (e.g. performance bonus, advance recovery)"
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  )}
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addAdjustmentRow}
+                    className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus size={16} /> Add adjustment
+                  </button>
                 </div>
 
                 {/* Net Pay */}
@@ -1650,6 +1715,7 @@ ${payslipLeaveBalances.length > 0 ? `
           const emp = employees.find(e => e.id === payslipRecord.employee_id);
           const includedLines = payslipLines.filter(b => b.included);
           const monthLabel = new Date(payslipRecord.month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' });
+          const payslipAdjustments = parseAdjustments(payslipRecord);
 
           return (
             <div id="payslip-content" className="space-y-5 print:text-sm">
@@ -1699,32 +1765,28 @@ ${payslipLeaveBalances.length > 0 ? `
                       <span className="text-sm text-gray-800">{fmt(b.computed_amount)}</span>
                     </div>
                   ))}
-                  {(payslipRecord.adjustment || 0) > 0 && (
-                    <div className="flex justify-between px-4 py-2.5">
+                  {payslipAdjustments.filter(a => a.type === 'add').map((a, i) => (
+                    <div key={`adj-add-${i}`} className="flex justify-between px-4 py-2.5">
                       <span className="text-sm text-gray-700">
-                        Adjustment
-                        {payslipRecord.adjustment_note && <span className="text-xs text-gray-400 ml-1">({payslipRecord.adjustment_note})</span>}
+                        {a.note || 'Adjustment'}
                       </span>
-                      <span className="text-sm font-semibold text-green-700">{fmt(payslipRecord.adjustment)}</span>
+                      <span className="text-sm font-semibold text-green-700">{fmt(a.amount)}</span>
                     </div>
-                  )}
+                  ))}
                   <div className="flex justify-between px-4 py-2.5 bg-blue-50">
                     <span className="text-sm font-semibold text-blue-800">Total Earnings</span>
-                    <span className="text-sm font-semibold text-blue-800">{fmt(payslipRecord.salary + payslipRecord.bonus + Math.max(payslipRecord.adjustment || 0, 0))}</span>
+                    <span className="text-sm font-semibold text-blue-800">{fmt(payslipRecord.salary + payslipRecord.bonus + payslipAdjustments.filter(a => a.type === 'add').reduce((s, a) => s + a.amount, 0))}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Negative adjustment shown alongside deductions */}
-              {(payslipRecord.adjustment || 0) < 0 && (
-                <div className="flex justify-between px-4 py-2.5 border border-red-100 bg-red-50 rounded-lg">
-                  <span className="text-sm text-gray-700">
-                    Adjustment (deduction)
-                    {payslipRecord.adjustment_note && <span className="text-xs text-gray-400 ml-1">({payslipRecord.adjustment_note})</span>}
-                  </span>
-                  <span className="text-sm font-semibold text-red-600">− {fmt(Math.abs(payslipRecord.adjustment))}</span>
+              {/* Deduction-type adjustments shown alongside deductions */}
+              {payslipAdjustments.filter(a => a.type === 'deduct').map((a, i) => (
+                <div key={`adj-ded-${i}`} className="flex justify-between px-4 py-2.5 border border-red-100 bg-red-50 rounded-lg">
+                  <span className="text-sm text-gray-700">{a.note || 'Adjustment'}</span>
+                  <span className="text-sm font-semibold text-red-600">− {fmt(a.amount)}</span>
                 </div>
-              )}
+              ))}
 
               {/* Deductions */}
               {payslipRecord.deductions > 0 && (
