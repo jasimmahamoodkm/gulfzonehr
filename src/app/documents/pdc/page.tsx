@@ -7,6 +7,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
+import SelectMenu from '@/components/ui/SelectMenu';
 import { FileText, CreditCard, Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -294,10 +295,14 @@ export default function PdcPage() {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Type">
-              <select className={inputCls} value={form.cheque_type} onChange={e => setForm({ ...form, cheque_type: e.target.value as ChequeType })}>
-                <option value="payable">Payable (we issue)</option>
-                <option value="receivable">Receivable (we receive)</option>
-              </select>
+              <SelectMenu
+                value={form.cheque_type}
+                onChange={v => setForm({ ...form, cheque_type: v as ChequeType })}
+                options={[
+                  { value: 'payable', label: 'Payable (we issue)' },
+                  { value: 'receivable', label: 'Receivable (we receive)' },
+                ]}
+              />
             </Field>
             <Field label="Cheque number *"><input className={inputCls} value={form.cheque_number} onChange={e => setForm({ ...form, cheque_number: e.target.value })} /></Field>
           </div>
@@ -309,9 +314,11 @@ export default function PdcPage() {
             <Field label="Amount"><input type="number" min="0" step="0.01" className={inputCls} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></Field>
             <Field label="Currency"><input className={inputCls} value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })} /></Field>
             <Field label="Status">
-              <select className={inputCls} value={form.status} onChange={e => setForm({ ...form, status: e.target.value as ChequeStatus })}>
-                {STATUSES.map(s => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
-              </select>
+              <SelectMenu
+                value={form.status}
+                onChange={v => setForm({ ...form, status: v as ChequeStatus })}
+                options={STATUSES.map(s => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))}
+              />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

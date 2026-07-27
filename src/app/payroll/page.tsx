@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
+import SelectMenu from '@/components/ui/SelectMenu';
 import { Plus, Download, Calendar, Info, Plane, Users, CheckCircle, XCircle, SkipForward, Trash2 } from 'lucide-react';
 
 /**
@@ -43,22 +44,18 @@ const MonthSelect: React.FC<{ value: string; onChange: (v: string) => void; clas
   const update = (newY: string, newM: string) => onChange(`${newY}-${newM.padStart(2,'0')}`);
   return (
     <div className={`flex gap-2 ${className}`}>
-      <select
+      <SelectMenu
         value={m}
-        onChange={e => update(y, e.target.value)}
-        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 text-sm"
-      >
-        {MONTHS.map((name, idx) => (
-          <option key={idx} value={String(idx + 1).padStart(2,'0')}>{name}</option>
-        ))}
-      </select>
-      <select
+        onChange={v => update(y, v)}
+        className="min-w-[9rem]"
+        options={MONTHS.map((name, idx) => ({ value: String(idx + 1).padStart(2, '0'), label: name }))}
+      />
+      <SelectMenu
         value={y}
-        onChange={e => update(e.target.value, m)}
-        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 text-sm"
-      >
-        {years.map(yr => <option key={yr} value={yr}>{yr}</option>)}
-      </select>
+        onChange={v => update(v, m)}
+        className="min-w-[6rem]"
+        options={years.map(yr => ({ value: String(yr), label: String(yr) }))}
+      />
     </div>
   );
 };
@@ -861,15 +858,30 @@ const PayrollPage: React.FC = () => {
 
   // ── Delete payroll record ──────────────────────────────────────
   const deletePayroll = async (id: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    const res = await fetch(apiUrl(`/api/payroll?id=${id}`), {
-      method: 'DELETE',
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    });
-    const json = await res.json();
-    const error = res.ok ? null : { message: json.error || 'Delete failed' };
-    if (!error) fetchPayroll();
+    // Snapshot for rollback, then drop the row immediately so the list updates
+    // without waiting for (or depending on) the refetch.
+    const previous = payrollData;
+    setPayrollData(rows => rows.filter(r => r.id !== id));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch(apiUrl(`/api/payroll?id=${id}`), {
+        method: 'DELETE',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Delete failed');
+
+      setMessage({ type: 'success', text: 'Payroll record deleted' });
+      setTimeout(() => setMessage(null), 3000);
+      fetchPayroll(); // reconcile with the server
+    } catch (err) {
+      setPayrollData(previous); // put the row back — the delete did not happen
+      setMessage({
+        type: 'error',
+        text: `Failed to delete payroll record: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      });
+    }
   };
 
   // ── Payslip ────────────────────────────────────────────────────
@@ -1406,18 +1418,15 @@ ${payslipLeaveBalances.length > 0 ? `
           {/* Employee */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Employee *</label>
-            <select
+            <SelectMenu
               value={selectedEmployeeId}
-              onChange={e => setSelectedEmployeeId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select employee</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.first_name} {emp.last_name}{emp.position ? ` — ${emp.position}` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedEmployeeId}
+              placeholder="Select employee"
+              options={employees.map(emp => ({
+                value: emp.id,
+                label: `${emp.first_name} ${emp.last_name}${emp.position ? ` — ${emp.position}` : ''}`,
+              }))}
+            />
           </div>
 
           {/* Month */}
