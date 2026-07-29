@@ -160,7 +160,6 @@ const PayrollPage: React.FC = () => {
   const [selectedPayrollMonth, setSelectedPayrollMonth] = useState(new Date().toISOString().substring(0, 7));
   const [basicSalary, setBasicSalary] = useState<number>(0);
   const [benefitLines, setBenefitLines] = useState<BenefitLine[]>([]);
-  const [deductions, setDeductions] = useState<number>(0);
   // Manual one-off adjustments beyond preset benefits — any number of
   // add/deduct lines, each with its own short description.
   type AdjustmentLine = { id: string; type: 'add' | 'deduct'; amount: number; note: string };
@@ -281,7 +280,7 @@ const PayrollPage: React.FC = () => {
   const adjustmentSigned = validAdjustments.reduce(
     (sum, a) => sum + (a.type === 'add' ? 1 : -1) * (a.amount || 0), 0);
 
-  const netPay = basicSalary + totalAllowances + adjustmentSigned - deductions - leaveDeductionAmount;
+  const netPay = basicSalary + totalAllowances + adjustmentSigned - leaveDeductionAmount;
 
   // ── Data fetching ──────────────────────────────────────────────
 
@@ -773,7 +772,9 @@ const PayrollPage: React.FC = () => {
         return;
       }
 
-      const totalDeductions = (deductions || 0) + leaveDeductionAmount;
+      // The deductions column now holds only the system-calculated leave
+      // deduction; ad-hoc deductions are recorded as deduct-type adjustments.
+      const totalDeductions = leaveDeductionAmount;
 
       const insertPayload: Record<string, unknown> = {
         employee_id: selectedEmployeeId,
@@ -846,7 +847,6 @@ const PayrollPage: React.FC = () => {
     setSelectedPayrollMonth(new Date().toISOString().substring(0, 7));
     setBasicSalary(0);
     setBenefitLines([]);
-    setDeductions(0);
     setModalError(null);
     setLeaveBalances([]);
     setMonthLeaves([]);
@@ -954,10 +954,15 @@ const PayrollPage: React.FC = () => {
 
   // ── Summary ────────────────────────────────────────────────────
 
+  // Manual adjustments live outside the bonus/deductions columns, so fold them
+  // in for display: additions count as allowances, deductions as deductions.
+  const adjAdd = (p: any) => parseAdjustments(p).filter(a => a.type === 'add').reduce((s, a) => s + a.amount, 0);
+  const adjDeduct = (p: any) => parseAdjustments(p).filter(a => a.type === 'deduct').reduce((s, a) => s + a.amount, 0);
+
   const summary = {
     total_salary: payrollData.reduce((s, p) => s + (p.salary || 0), 0),
-    total_allowances: payrollData.reduce((s, p) => s + (p.bonus || 0), 0),
-    total_deductions: payrollData.reduce((s, p) => s + (p.deductions || 0), 0),
+    total_allowances: payrollData.reduce((s, p) => s + (p.bonus || 0) + adjAdd(p), 0),
+    total_deductions: payrollData.reduce((s, p) => s + (p.deductions || 0) + adjDeduct(p), 0),
     total_net: payrollData.reduce((s, p) => s + (p.net_pay || 0), 0),
     paid: payrollData.filter(p => p.status === 'Paid').length,
     processed: payrollData.filter(p => p.status === 'Processed').length,
@@ -977,8 +982,8 @@ const PayrollPage: React.FC = () => {
       render: (value: string) => employeeNameById.get(value) || '—',
     },
     { key: 'salary', label: 'Basic Salary', render: (v: number) => fmt(v) },
-    { key: 'bonus', label: 'Allowances', render: (v: number) => fmt(v) },
-    { key: 'deductions', label: 'Deductions', render: (v: number) => fmt(v) },
+    { key: 'bonus', label: 'Allowances', render: (v: number, row: any) => fmt((v || 0) + adjAdd(row)) },
+    { key: 'deductions', label: 'Deductions', render: (v: number, row: any) => fmt((v || 0) + adjDeduct(row)) },
     {
       key: 'net_pay', label: 'Net Pay',
       render: (v: number) => <span className="font-bold text-green-700">{fmt(v)}</span>,
@@ -1529,21 +1534,10 @@ ${payslipLeaveBalances.length > 0 ? `
                   </div>
                 )}
 
-                {/* Manual deductions */}
-                <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Other Deductions</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={deductions || ''}
-                    onChange={e => setDeductions(parseFloat(e.target.value) || 0)}
-                    placeholder="0.00"
-                    className="w-32 text-right px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-red-600"
-                  />
-                </div>
-
-                {/* Manual one-off adjustments (beyond preset benefits) */}
+                {/* Manual one-off adjustments (beyond preset benefits).
+                    Replaces the old free-form "Other Deductions" field — a
+                    deduct-type adjustment does the same job but carries a
+                    description and can be listed several times. */}
                 <div className="px-4 py-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Extra Adjustments</span>
@@ -1789,16 +1783,9 @@ ${payslipLeaveBalances.length > 0 ? `
                 </div>
               </div>
 
-              {/* Deduction-type adjustments shown alongside deductions */}
-              {payslipAdjustments.filter(a => a.type === 'deduct').map((a, i) => (
-                <div key={`adj-ded-${i}`} className="flex justify-between px-4 py-2.5 border border-red-100 bg-red-50 rounded-lg">
-                  <span className="text-sm text-gray-700">{a.note || 'Adjustment'}</span>
-                  <span className="text-sm font-semibold text-red-600">− {fmt(a.amount)}</span>
-                </div>
-              ))}
-
-              {/* Deductions */}
-              {payslipRecord.deductions > 0 && (
+              {/* Deductions — leave deduction, any legacy "other deductions",
+                  and deduct-type adjustments, with a combined total. */}
+              {(payslipRecord.deductions > 0 || payslipAdjustments.some(a => a.type === 'deduct')) && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
                     <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Deductions</span>
@@ -1819,9 +1806,17 @@ ${payslipLeaveBalances.length > 0 ? `
                         <span className="text-sm font-semibold text-red-600">{fmt(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0))}</span>
                       </div>
                     )}
+                    {payslipAdjustments.filter(a => a.type === 'deduct').map((a, i) => (
+                      <div key={`adj-ded-${i}`} className="flex justify-between px-4 py-2.5">
+                        <span className="text-sm text-gray-700">{a.note || 'Adjustment'}</span>
+                        <span className="text-sm font-semibold text-red-600">{fmt(a.amount)}</span>
+                      </div>
+                    ))}
                     <div className="flex justify-between px-4 py-2.5 bg-red-50">
                       <span className="text-sm font-semibold text-red-800">Total Deductions</span>
-                      <span className="text-sm font-semibold text-red-700">{fmt(payslipRecord.deductions)}</span>
+                      <span className="text-sm font-semibold text-red-700">
+                        {fmt((payslipRecord.deductions || 0) + payslipAdjustments.filter(a => a.type === 'deduct').reduce((s, a) => s + a.amount, 0))}
+                      </span>
                     </div>
                   </div>
                 </div>
