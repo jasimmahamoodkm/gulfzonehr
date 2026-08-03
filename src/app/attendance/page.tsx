@@ -10,6 +10,7 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
+import SelectMenu from '@/components/ui/SelectMenu';
 import TimePicker from '@/components/ui/TimePicker';
 import { Plus, Calendar, TrendingUp, Clock } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
@@ -394,17 +395,12 @@ const AttendancePage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Employee</label>
-            <select
-              {...register('employee_id')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select Employee</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.first_name} {emp.last_name}
-                </option>
-              ))}
-            </select>
+            <SelectMenu
+              value={watch('employee_id') || ''}
+              onChange={(v) => setValue('employee_id', v, { shouldValidate: true })}
+              placeholder="Select Employee"
+              options={employees.map((emp) => ({ value: emp.id, label: `${emp.first_name} ${emp.last_name}` }))}
+            />
             {errors.employee_id && (
               <p className="mt-1 text-sm text-red-600">{errors.employee_id.message}</p>
             )}
@@ -452,17 +448,12 @@ const AttendancePage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select
-              {...register('status')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select Status</option>
-              <option value="Present">Present</option>
-              <option value="Late">Late</option>
-              <option value="Absent">Absent</option>
-              <option value="On Leave">On Leave</option>
-              <option value="Half-Day">Half-Day</option>
-            </select>
+            <SelectMenu
+              value={watch('status') || ''}
+              onChange={(v) => setValue('status', v as AttendanceFormData['status'], { shouldValidate: true })}
+              placeholder="Select Status"
+              options={['Present', 'Late', 'Absent', 'On Leave', 'Half-Day'].map(s => ({ value: s, label: s }))}
+            />
             {errors.status && (
               <p className="mt-1 text-sm text-red-600">{errors.status.message}</p>
             )}

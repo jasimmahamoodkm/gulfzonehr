@@ -10,6 +10,7 @@ import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Table from '@/components/ui/Table';
 import DatePicker from '@/components/ui/DatePicker';
+import SelectMenu from '@/components/ui/SelectMenu';
 import Link from 'next/link';
 import { Plus, AlertCircle, Clock, CheckCircle, Eye, Trash2, Lock, FileText, CreditCard } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
@@ -682,32 +683,23 @@ const DocumentsPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Document Owner</label>
-            <select
-              {...register('employee_id')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- Select Employee --</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.first_name} {emp.last_name}
-                </option>
-              ))}
-            </select>
+            <SelectMenu
+              value={watch('employee_id') || ''}
+              onChange={(v) => setValue('employee_id', v, { shouldValidate: true })}
+              placeholder="-- Select Employee --"
+              options={employees.map((emp) => ({ value: emp.id, label: `${emp.first_name} ${emp.last_name}` }))}
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
-            <select
-              {...register('document_type')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- Select Type --</option>
-              <option>Driving License</option>
-              <option>Passport</option>
-              <option>Emirates ID</option>
-              <option>Company License</option>
-              <option>Other</option>
-            </select>
+            <SelectMenu
+              value={watch('document_type') || ''}
+              onChange={(v) => setValue('document_type', v, { shouldValidate: true })}
+              placeholder="-- Select Type --"
+              options={['Driving License', 'Passport', 'Emirates ID', 'Company License', 'Other']
+                .map(t => ({ value: t, label: t }))}
+            />
             {errors.document_type && (
               <p className="mt-1 text-sm text-red-600">{errors.document_type.message}</p>
             )}

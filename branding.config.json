@@ -1,9 +1,9 @@
 {
-  "appName": "GulfZone HR Management System",
-  "shortName": "GulfZone HR",
-  "organizationName": "GulfZone Group",
-  "description": "Comprehensive HR management solution for GulfZone Group",
-  "initials": "GZ",
+  "appName": "HR Management System",
+  "shortName": "HR Portal",
+  "organizationName": "GulfZone",
+  "description": "Comprehensive HR management solution",
+  "initials": "HR",
   "images": {
     "logo": "/branding/icon-512.png",
     "favicon": "/branding/icon-192.png"

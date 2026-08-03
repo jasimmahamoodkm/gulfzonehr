@@ -78,15 +78,15 @@ const SettingsPage: React.FC = () => {
           <p className="text-gray-600 mt-1">Manage your account and preferences</p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-4 border-b border-gray-200">
+        {/* Tabs — scrolls horizontally on narrow screens instead of widening the page */}
+        <div className="flex gap-4 border-b border-gray-200 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab.id
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'

@@ -10,6 +10,15 @@ import Button from '@/components/ui/Button';
 import Table from '@/components/ui/Table';
 import Modal from '@/components/ui/Modal';
 import DatePicker from '@/components/ui/DatePicker';
+import SelectMenu from '@/components/ui/SelectMenu';
+
+const leaveTypeOptions = [
+  { value: 'Vacation', label: 'Vacation' },
+  { value: 'Sick Leave', label: 'Sick Leave' },
+  { value: 'Personal', label: 'Personal' },
+  { value: 'Maternity Leave', label: 'Maternity Leave' },
+  { value: 'Other', label: 'Other' },
+];
 import { Plus, CheckCircle, Clock, XCircle, Users } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -377,7 +386,7 @@ const LeaveManagementPage: React.FC = () => {
           setMessage(null);
         }}
         title="New Leave Request"
-        size="md"
+        size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => {
@@ -406,20 +415,13 @@ const LeaveManagementPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Employee</label>
-            <select
-              {...register('employee_id')}
+            <SelectMenu
+              value={watch('employee_id') || ''}
+              onChange={(v) => setValue('employee_id', v, { shouldValidate: true })}
               disabled={isEmployee}
-              className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                isEmployee ? 'bg-gray-100 cursor-not-allowed' : ''
-              }`}
-            >
-              <option value="">Select Employee</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.first_name} {emp.last_name}
-                </option>
-              ))}
-            </select>
+              placeholder="Select Employee"
+              options={employees.map((emp) => ({ value: emp.id, label: `${emp.first_name} ${emp.last_name}` }))}
+            />
             {isEmployee && (
               <p className="mt-1 text-sm text-gray-600">Your leave request will be submitted under your name</p>
             )}
@@ -430,17 +432,12 @@ const LeaveManagementPage: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Leave Type</label>
-            <select
-              {...register('leave_type')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select Leave Type</option>
-              <option value="Vacation">Vacation</option>
-              <option value="Sick Leave">Sick Leave</option>
-              <option value="Personal">Personal</option>
-              <option value="Maternity Leave">Maternity Leave</option>
-              <option value="Other">Other</option>
-            </select>
+            <SelectMenu
+              value={watch('leave_type') || ''}
+              onChange={(v) => setValue('leave_type', v, { shouldValidate: true })}
+              placeholder="Select Leave Type"
+              options={leaveTypeOptions}
+            />
             {errors.leave_type && (
               <p className="mt-1 text-sm text-red-600">{errors.leave_type.message}</p>
             )}
