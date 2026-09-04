@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from '@/lib/api';
 import { companyBranding } from '@/config/branding';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 const companySchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -30,6 +31,7 @@ type CompanyFormData = z.infer<typeof companySchema>;
 
 const CompaniesPage: React.FC = () => {
   const { user } = useAuth();
+  const schedule = useTimeouts();
 
   // Role flags
   const isSuperAdmin = user?.roles?.some(r => r.role_name === 'Super Admin') ?? false;
@@ -50,6 +52,12 @@ const CompaniesPage: React.FC = () => {
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null); // cache-busted path after upload
+  const companiesMounted = React.useRef(true);
+
+  React.useEffect(() => {
+    companiesMounted.current = true;
+    return () => { companiesMounted.current = false; };
+  }, []);
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
@@ -127,14 +135,18 @@ const CompaniesPage: React.FC = () => {
     let lastErr: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        setCompanies(await loadOnce());
+        const list = await loadOnce();
+        if (!companiesMounted.current) return;
+        setCompanies(list);
         setLoading(false);
         return;
       } catch (err) {
         lastErr = err;
         if (attempt === 0) await new Promise((r) => setTimeout(r, 800)); // let auth settle, retry once
+        if (!companiesMounted.current) return;
       }
     }
+    if (!companiesMounted.current) return;
     console.error('Error fetching companies (after retry):', lastErr);
     setMessage({ type: 'error', text: 'Failed to load companies' });
     setLoading(false);
@@ -175,7 +187,7 @@ const CompaniesPage: React.FC = () => {
       setEditingId(null);
       setShowModal(false);
       fetchCompanies();
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       setMessage({ type: 'error', text: (err as any)?.message || 'Failed to save company' });
     } finally {
@@ -206,7 +218,7 @@ const CompaniesPage: React.FC = () => {
       if (error) throw error;
       setMessage({ type: 'success', text: 'Company deleted successfully' });
       fetchCompanies();
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to delete company' });
     } finally {
@@ -229,20 +241,20 @@ const CompaniesPage: React.FC = () => {
           {canEdit && (
             <button
               onClick={() => handleEdit(row)}
-              className="p-1 hover:bg-gray-200 rounded transition"
+              className="p-1 hover:bg-muted rounded transition"
               title="Edit company"
             >
-              <Edit size={18} className="text-gray-600" />
+              <Edit size={18} className="text-muted-foreground" />
             </button>
           )}
           {canDelete && (
             <button
               onClick={() => deleteCompany(row.id)}
               disabled={deleteLoading === row.id}
-              className="p-1 hover:bg-gray-200 rounded transition disabled:opacity-50"
+              className="p-1 hover:bg-muted rounded transition disabled:opacity-50"
               title="Delete company"
             >
-              <Trash2 size={18} className="text-red-600" />
+              <Trash2 size={18} className="text-destructive" />
             </button>
           )}
         </div>
@@ -256,8 +268,8 @@ const CompaniesPage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Companies</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="text-3xl font-bold text-foreground">Companies</h1>
+            <p className="text-muted-foreground mt-1">
               {isSuperAdmin
                 ? 'Manage all companies under GulfZone Group'
                 : 'View your assigned company details'}
@@ -270,7 +282,7 @@ const CompaniesPage: React.FC = () => {
             </Button>
           )}
           {!canCreate && isCompanyAdmin && (
-            <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-secondary-foreground bg-secondary px-4 py-2 rounded-lg">
               <Lock size={16} />
               View &amp; edit your company only
             </div>
@@ -279,7 +291,7 @@ const CompaniesPage: React.FC = () => {
 
         {/* Global message */}
         {message && !showModal && (
-          <div className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          <div className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-destructive/10 border border-destructive/20 text-destructive'}`}>
             {message.text}
           </div>
         )}
@@ -287,7 +299,7 @@ const CompaniesPage: React.FC = () => {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-8">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
           </div>
         )}
 
@@ -296,7 +308,7 @@ const CompaniesPage: React.FC = () => {
             {/* Company Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {companies.length === 0 ? (
-                <div className="col-span-full text-center py-8 text-gray-500">
+                <div className="col-span-full text-center py-8 text-muted-foreground">
                   No companies found.
                 </div>
               ) : (
@@ -304,26 +316,26 @@ const CompaniesPage: React.FC = () => {
                   <Card key={company.id} className="hover:shadow-lg transition">
                     <div className="space-y-4">
                       <div>
-                        <h3 className="text-lg font-bold text-gray-900">{company.name}</h3>
-                        <p className="text-sm text-gray-600">{company.industry}</p>
+                        <h3 className="text-lg font-bold text-foreground">{company.name}</h3>
+                        <p className="text-sm text-muted-foreground">{company.industry}</p>
                       </div>
                       <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 text-gray-700">
-                          <MapPin size={16} className="text-blue-600" />
+                        <div className="flex items-center gap-2 text-foreground">
+                          <MapPin size={16} className="text-primary" />
                           <span>{company.city}, {company.country}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-700">
-                          <Phone size={16} className="text-blue-600" />
+                        <div className="flex items-center gap-2 text-foreground">
+                          <Phone size={16} className="text-primary" />
                           <span>{company.phone}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-700">
-                          <Mail size={16} className="text-blue-600" />
+                        <div className="flex items-center gap-2 text-foreground">
+                          <Mail size={16} className="text-primary" />
                           <span className="truncate">{company.email}</span>
                         </div>
                       </div>
-                      <div className="pt-4 border-t border-gray-200 flex justify-between text-sm">
-                        <span className="text-gray-600">Employees</span>
-                        <span className="font-semibold text-gray-900">{company.employee_count ?? '—'}</span>
+                      <div className="pt-4 border-t border-border flex justify-between text-sm">
+                        <span className="text-muted-foreground">Employees</span>
+                        <span className="font-semibold text-foreground">{company.employee_count ?? '—'}</span>
                       </div>
                     </div>
                   </Card>
@@ -334,7 +346,7 @@ const CompaniesPage: React.FC = () => {
             {/* Table */}
             <Card header={<h2 className="text-lg font-semibold">{isSuperAdmin ? 'All Companies' : 'Company Details'}</h2>} noPadding>
               {companies.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">No companies found</div>
+                <div className="p-8 text-center text-muted-foreground">No companies found</div>
               ) : (
                 <Table columns={columns} data={companies} />
               )}
@@ -360,73 +372,73 @@ const CompaniesPage: React.FC = () => {
       >
         <form className="space-y-4">
           {message && (
-            <div className={`p-3 rounded-lg ${message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            <div className={`p-3 rounded-lg ${message.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-destructive/10 border border-destructive/20 text-destructive'}`}>
               {message.text}
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Company Name</label>
-            <input {...register('name')} type="text" placeholder="Enter company name" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>}
+            <label className="block text-sm font-medium text-foreground mb-2">Company Name</label>
+            <input {...register('name')} type="text" placeholder="Enter company name" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+            {errors.name && <p className="mt-1 text-sm text-destructive">{errors.name.message}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input {...register('email')} type="email" placeholder="Enter company email" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>}
+            <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+            <input {...register('email')} type="email" placeholder="Enter company email" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+            {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email.message}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-            <input {...register('phone')} type="tel" placeholder="Enter phone number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>}
+            <label className="block text-sm font-medium text-foreground mb-2">Phone</label>
+            <input {...register('phone')} type="tel" placeholder="Enter phone number" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+            {errors.phone && <p className="mt-1 text-sm text-destructive">{errors.phone.message}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
-            <input {...register('industry')} type="text" placeholder="Enter industry" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.industry && <p className="mt-1 text-sm text-red-600">{errors.industry.message}</p>}
+            <label className="block text-sm font-medium text-foreground mb-2">Industry</label>
+            <input {...register('industry')} type="text" placeholder="Enter industry" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+            {errors.industry && <p className="mt-1 text-sm text-destructive">{errors.industry.message}</p>}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-              <input {...register('city')} type="text" placeholder="City" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              {errors.city && <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>}
+              <label className="block text-sm font-medium text-foreground mb-2">City</label>
+              <input {...register('city')} type="text" placeholder="City" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+              {errors.city && <p className="mt-1 text-sm text-destructive">{errors.city.message}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
-              <input {...register('country')} type="text" placeholder="Country" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              {errors.country && <p className="mt-1 text-sm text-red-600">{errors.country.message}</p>}
+              <label className="block text-sm font-medium text-foreground mb-2">Country</label>
+              <input {...register('country')} type="text" placeholder="Country" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+              {errors.country && <p className="mt-1 text-sm text-destructive">{errors.country.message}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Founded Year</label>
-              <input {...register('founded_year', { valueAsNumber: true })} type="number" placeholder="Year" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              {errors.founded_year && <p className="mt-1 text-sm text-red-600">{errors.founded_year.message}</p>}
+              <label className="block text-sm font-medium text-foreground mb-2">Founded Year</label>
+              <input {...register('founded_year', { valueAsNumber: true })} type="number" placeholder="Year" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+              {errors.founded_year && <p className="mt-1 text-sm text-destructive">{errors.founded_year.message}</p>}
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-            <input {...register('address')} type="text" placeholder="Enter full address" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address.message}</p>}
+            <label className="block text-sm font-medium text-foreground mb-2">Address</label>
+            <input {...register('address')} type="text" placeholder="Enter full address" className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring" />
+            {errors.address && <p className="mt-1 text-sm text-destructive">{errors.address.message}</p>}
           </div>
 
           {/* Company logo — uploaded, compressed to 512×512 PNG, path saved to config */}
-          <div className="pt-2 border-t border-gray-200">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Company Logo <span className="font-normal text-gray-400">(auto-compressed to 512×512)</span>
+          <div className="pt-2 border-t border-border">
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Company Logo <span className="font-normal text-muted-foreground">(auto-compressed to 512×512)</span>
             </label>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+              <div className="w-16 h-16 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                 {logoPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={logoPreview} alt="Company logo" className="max-w-full max-h-full object-contain" />
                 ) : (
-                  <span className="text-xs text-gray-400">No logo</span>
+                  <span className="text-xs text-muted-foreground">No logo</span>
                 )}
               </div>
               <div>
                 <input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"
                   disabled={logoUploading}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ''; }}
-                  className="block text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 file:cursor-pointer disabled:opacity-50" />
-                <p className="mt-1 text-xs text-gray-400">
+                  className="block text-sm text-muted-foreground file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent file:text-primary hover:file:bg-accent file:cursor-pointer disabled:opacity-50" />
+                <p className="mt-1 text-xs text-muted-foreground">
                   {logoUploading ? 'Uploading & compressing…' : 'PNG, JPG, WebP or SVG. Shown in the header, sidebar and payslips.'}
                 </p>
               </div>

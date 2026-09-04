@@ -14,6 +14,7 @@ import { Plus, CheckCircle, Clock, XCircle, History, FileText } from 'lucide-rea
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/context/CompanyContext';
 import { supabase } from '@/lib/supabase';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 const leaveSchema = z.object({
   leave_type: z.string().min(1, 'Leave type is required'),
@@ -33,6 +34,7 @@ type LeaveFormData = z.infer<typeof leaveSchema>;
 const LeavesPage: React.FC = () => {
   const { user } = useAuth();
   const { selectedCompany, setSelectedCompany, companies } = useCompany();
+  const schedule = useTimeouts();
   const [showModal, setShowModal] = useState(false);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [employeeData, setEmployeeData] = useState<any>(null);
@@ -140,7 +142,7 @@ const LeavesPage: React.FC = () => {
       reset();
       setShowModal(false);
       fetchLeavesData();
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       const errMsg = (err as any)?.message || 'Failed to submit leave request';
       setMessage({ type: 'error', text: errMsg });
@@ -178,14 +180,14 @@ const LeavesPage: React.FC = () => {
         <div className="flex items-center gap-1">
           {value === 'Approved' && <CheckCircle size={16} className="text-green-600" />}
           {value === 'Pending' && <Clock size={16} className="text-orange-600" />}
-          {value === 'Rejected' && <XCircle size={16} className="text-red-600" />}
+          {value === 'Rejected' && <XCircle size={16} className="text-destructive" />}
           <span
             className={`px-3 py-1 rounded-full text-xs font-semibold ${
               value === 'Approved'
                 ? 'bg-green-100 text-green-800'
                 : value === 'Pending'
                 ? 'bg-orange-100 text-orange-800'
-                : 'bg-red-100 text-red-800'
+                : 'bg-destructive/15 text-red-800'
             }`}
           >
             {value}
@@ -205,8 +207,8 @@ const LeavesPage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">My Leaves</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="text-3xl font-bold text-foreground">My Leaves</h1>
+            <p className="text-muted-foreground mt-1">
               {selectedCompany ? `Manage your leaves at ${selectedCompany.name}` : 'Select a company to view leaves'}
             </p>
           </div>
@@ -222,8 +224,8 @@ const LeavesPage: React.FC = () => {
         </div>
 
         {!selectedCompany && (
-          <Card className="bg-blue-50 border border-blue-200">
-            <p className="text-blue-700 text-center py-4">Please select a company from the header to view your leaves</p>
+          <Card className="bg-accent border border-primary/20">
+            <p className="text-primary text-center py-4">Please select a company from the header to view your leaves</p>
           </Card>
         )}
 
@@ -232,7 +234,7 @@ const LeavesPage: React.FC = () => {
             {/* Loading State */}
             {loading && (
               <div className="flex items-center justify-center py-8">
-                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
               </div>
             )}
 
@@ -243,8 +245,8 @@ const LeavesPage: React.FC = () => {
                   <Card>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-gray-600 text-sm mb-1">Pending Requests</p>
-                        <p className="text-3xl font-bold text-gray-900">{pendingCount}</p>
+                        <p className="text-muted-foreground text-sm mb-1">Pending Requests</p>
+                        <p className="text-3xl font-bold text-foreground">{pendingCount}</p>
                       </div>
                       <Clock size={32} className="text-orange-200" />
                     </div>
@@ -252,8 +254,8 @@ const LeavesPage: React.FC = () => {
                   <Card>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-gray-600 text-sm mb-1">Approved Leaves</p>
-                        <p className="text-3xl font-bold text-gray-900">{approvedCount}</p>
+                        <p className="text-muted-foreground text-sm mb-1">Approved Leaves</p>
+                        <p className="text-3xl font-bold text-foreground">{approvedCount}</p>
                       </div>
                       <CheckCircle size={32} className="text-green-200" />
                     </div>
@@ -261,10 +263,10 @@ const LeavesPage: React.FC = () => {
                   <Card>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-gray-600 text-sm mb-1">Days Used</p>
-                        <p className="text-3xl font-bold text-gray-900">{totalDaysUsed}</p>
+                        <p className="text-muted-foreground text-sm mb-1">Days Used</p>
+                        <p className="text-3xl font-bold text-foreground">{totalDaysUsed}</p>
                       </div>
-                      <History size={32} className="text-blue-200" />
+                      <History size={32} className="text-primary" />
                     </div>
                   </Card>
                 </div>
@@ -272,7 +274,7 @@ const LeavesPage: React.FC = () => {
                 {/* Leave History */}
                 <Card header={<h2 className="text-lg font-semibold flex items-center gap-2"><FileText size={20} /> Leave History</h2>} noPadding>
                   {leaveRequests.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
+                    <div className="p-8 text-center text-muted-foreground">
                       No leave requests found. <br /> Click "Apply for Leave" to submit your first leave request.
                     </div>
                   ) : (
@@ -315,17 +317,17 @@ const LeavesPage: React.FC = () => {
             <div className={`p-3 rounded-lg ${
               message.type === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-destructive/10 border border-destructive/20 text-destructive'
             }`}>
               {message.text}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Leave Type</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Leave Type</label>
             <select
               {...register('leave_type')}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Select Leave Type</option>
               <option value="Vacation">Vacation</option>
@@ -335,45 +337,45 @@ const LeavesPage: React.FC = () => {
               <option value="Other">Other</option>
             </select>
             {errors.leave_type && (
-              <p className="mt-1 text-sm text-red-600">{errors.leave_type.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.leave_type.message}</p>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
+              <label className="block text-sm font-medium text-foreground mb-2">From Date</label>
               <DatePicker
                 value={startDate}
                 onChange={(date) => setValue('start_date', date)}
                 placeholder="Select start date"
               />
               {errors.start_date && (
-                <p className="mt-1 text-sm text-red-600">{errors.start_date.message}</p>
+                <p className="mt-1 text-sm text-destructive">{errors.start_date.message}</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
+              <label className="block text-sm font-medium text-foreground mb-2">To Date</label>
               <DatePicker
                 value={endDate}
                 onChange={(date) => setValue('end_date', date)}
                 placeholder="Select end date"
               />
               {errors.end_date && (
-                <p className="mt-1 text-sm text-red-600">{errors.end_date.message}</p>
+                <p className="mt-1 text-sm text-destructive">{errors.end_date.message}</p>
               )}
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Reason</label>
             <textarea
               {...register('reason')}
               placeholder="Enter reason for leave"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
               rows={3}
             />
             {errors.reason && (
-              <p className="mt-1 text-sm text-red-600">{errors.reason.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.reason.message}</p>
             )}
           </div>
         </form>

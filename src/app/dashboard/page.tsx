@@ -24,12 +24,12 @@ const DashboardPage: React.FC = () => {
   const { selectedCompany } = useCompany();
   const router = useRouter();
   const [stats, setStats] = useState([
-    { label: 'Total Employees', value: 0, icon: Users, color: 'bg-blue-100 text-blue-600', href: '/employees' },
+    { label: 'Total Employees', value: 0, icon: Users, color: 'bg-accent text-primary', href: '/employees' },
     { label: 'Total Companies', value: 0, icon: Building2, color: 'bg-green-100 text-green-600', href: '/companies' },
     { label: 'On Leave Today', value: 0, icon: Calendar, color: 'bg-orange-100 text-orange-600', href: '/attendance' },
     { label: 'Docs Expiring (30d)', value: 0, icon: FileWarning, color: 'bg-amber-100 text-amber-600', href: '/documents?filter=expiring' },
-    { label: 'Docs Expired', value: 0, icon: FileWarning, color: 'bg-red-100 text-red-600', href: '/documents?filter=expired' },
-    { label: 'PDC Due (10d)', value: 0, icon: CreditCard, color: 'bg-purple-100 text-purple-600', href: '/documents/pdc' },
+    { label: 'Docs Expired', value: 0, icon: FileWarning, color: 'bg-destructive/15 text-destructive', href: '/documents?filter=expired' },
+    { label: 'PDC Due (10d)', value: 0, icon: CreditCard, color: 'bg-accent text-accent-foreground', href: '/documents/pdc' },
   ]);
   const [chartData, setChartData] = useState<{ label: string; count: number }[]>([]);
   const [recentHires, setRecentHires] = useState<any[]>([]);
@@ -38,6 +38,8 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
@@ -110,14 +112,15 @@ const DashboardPage: React.FC = () => {
           { count: pdcDueCount },
         ] = await Promise.all([attQuery, docQuery, expiredQuery, leaveQuery, pdcQuery]);
         if (attError) throw attError;
+        if (cancelled) return;
 
         setStats([
-          { label: 'Total Employees', value: emps.length, icon: Users, color: 'bg-blue-100 text-blue-600', href: '/employees' },
+          { label: 'Total Employees', value: emps.length, icon: Users, color: 'bg-accent text-primary', href: '/employees' },
           { label: 'Total Companies', value: companies?.length || 0, icon: Building2, color: 'bg-green-100 text-green-600', href: '/companies' },
           { label: 'On Leave Today', value: todayAttendance?.length || 0, icon: Calendar, color: 'bg-orange-100 text-orange-600', href: '/attendance' },
           { label: 'Docs Expiring (30d)', value: expiringDocs?.length || 0, icon: FileWarning, color: 'bg-amber-100 text-amber-600', href: '/documents?filter=expiring' },
-          { label: 'Docs Expired', value: expiredCount || 0, icon: FileWarning, color: 'bg-red-100 text-red-600', href: '/documents?filter=expired' },
-          { label: 'PDC Due (10d)', value: pdcDueCount || 0, icon: CreditCard, color: 'bg-purple-100 text-purple-600', href: '/documents/pdc' },
+          { label: 'Docs Expired', value: expiredCount || 0, icon: FileWarning, color: 'bg-destructive/15 text-destructive', href: '/documents?filter=expired' },
+          { label: 'PDC Due (10d)', value: pdcDueCount || 0, icon: CreditCard, color: 'bg-accent text-accent-foreground', href: '/documents/pdc' },
         ]);
 
         // Recent hires (last 4, from the already-scoped employee list)
@@ -161,15 +164,20 @@ const DashboardPage: React.FC = () => {
             date: doc.expiry_date,
           })),
         ].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 6);
+        if (cancelled) return;
         setUpcoming(items);
       } catch (err) {
+        if (cancelled) return;
         console.error('Error fetching dashboard data:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchDashboardData();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCompany?.id]);
 
   const maxDept = Math.max(1, ...deptHeadcount.map((d) => d.count));
@@ -178,15 +186,15 @@ const DashboardPage: React.FC = () => {
     <Layout>
       <div className="space-y-8">
         {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg p-8 text-white">
+        <div className="bg-gradient-to-r from-primary to-primary/80 rounded-lg p-8 text-primary-foreground">
           <h1 className="text-4xl font-bold mb-2">Welcome back, {user?.first_name || 'User'}!</h1>
-          <p className="text-blue-100">Here's what's happening with your organization today.</p>
+          <p className="text-primary-foreground">Here's what's happening with your organization today.</p>
         </div>
 
         {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
           </div>
         )}
 
@@ -207,8 +215,8 @@ const DashboardPage: React.FC = () => {
                       </div>
                     </div>
                     <div>
-                      <p className="text-gray-600 text-sm mb-1">{stat.label}</p>
-                      <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+                      <p className="text-muted-foreground text-sm mb-1">{stat.label}</p>
+                      <p className="text-3xl font-bold text-foreground">{stat.value}</p>
                     </div>
                   </div>
                 </Card>
@@ -221,20 +229,20 @@ const DashboardPage: React.FC = () => {
         <Card>
           <div className="space-y-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Recent Hires</h2>
+              <h2 className="text-lg font-semibold text-foreground">Recent Hires</h2>
               <Button variant="outline" size="sm" onClick={() => router.push('/employees')}>View All</Button>
             </div>
             <div className="space-y-3">
               {recentHires.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No recent hires</p>
+                <p className="text-muted-foreground text-center py-4">No recent hires</p>
               ) : (
                 recentHires.map((hire, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={idx} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
-                      <p className="font-medium text-gray-900">{hire.first_name} {hire.last_name}</p>
-                      <p className="text-sm text-gray-600">{hire.position} • {hire.company_name}</p>
+                      <p className="font-medium text-foreground">{hire.first_name} {hire.last_name}</p>
+                      <p className="text-sm text-muted-foreground">{hire.position} • {hire.company_name}</p>
                     </div>
-                    <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full">
+                    <span className="text-xs text-muted-foreground bg-card px-3 py-1 rounded-full">
                       {hire.date_of_joining ? new Date(hire.date_of_joining).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
                     </span>
                   </div>
@@ -247,7 +255,7 @@ const DashboardPage: React.FC = () => {
         {/* Employee Growth Chart — cumulative headcount, last 12 months */}
         <Card header={<h2 className="text-lg font-semibold">Employee Growth (last 12 months)</h2>}>
           {chartData.every((d) => d.count === 0) ? (
-            <p className="text-gray-500 text-center py-8">No employee data yet</p>
+            <p className="text-muted-foreground text-center py-8">No employee data yet</p>
           ) : (
             <div className="h-64 flex items-end gap-2 justify-around">
               {chartData.map((data, i) => {
@@ -256,12 +264,12 @@ const DashboardPage: React.FC = () => {
                 return (
                   <div key={i} className="flex flex-col items-center gap-2 flex-1">
                     <div
-                      className="bg-blue-600 rounded-t-lg w-full max-w-8 transition-all hover:bg-blue-700"
+                      className="bg-primary rounded-t-lg w-full max-w-8 transition-all hover:bg-primary/90"
                       style={{ height: `${Math.max(2, height)}%` }}
                       title={`${data.label}: ${data.count}`}
                     />
-                    <span className="text-xs text-gray-600 font-medium">{data.label}</span>
-                    <span className="text-xs text-gray-500">{data.count}</span>
+                    <span className="text-xs text-muted-foreground font-medium">{data.label}</span>
+                    <span className="text-xs text-muted-foreground">{data.count}</span>
                   </div>
                 );
               })}
@@ -274,17 +282,17 @@ const DashboardPage: React.FC = () => {
           <Card header={<h2 className="text-lg font-semibold">Department Headcount</h2>}>
             <div className="space-y-4">
               {deptHeadcount.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No employees yet</p>
+                <p className="text-muted-foreground text-center py-4">No employees yet</p>
               ) : (
                 deptHeadcount.map((dept) => (
                   <div key={dept.name}>
                     <div className="flex justify-between mb-1">
-                      <span className="font-medium text-gray-900">{dept.name}</span>
-                      <span className="text-sm text-gray-600">{dept.count}</span>
+                      <span className="font-medium text-foreground">{dept.name}</span>
+                      <span className="text-sm text-muted-foreground">{dept.count}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div
-                        className="bg-blue-600 h-2 rounded-full"
+                        className="bg-primary h-2 rounded-full"
                         style={{ width: `${(dept.count / maxDept) * 100}%` }}
                       />
                     </div>
@@ -297,14 +305,14 @@ const DashboardPage: React.FC = () => {
           <Card header={<h2 className="text-lg font-semibold">Upcoming (next 30 days)</h2>}>
             <div className="space-y-3">
               {upcoming.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">Nothing scheduled — no leaves starting or documents expiring in the next 30 days</p>
+                <p className="text-muted-foreground text-center py-4">Nothing scheduled — no leaves starting or documents expiring in the next 30 days</p>
               ) : (
                 upcoming.map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                    <Clock size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div key={idx} className="flex items-start gap-3 p-3 bg-muted rounded-lg">
+                    <Clock size={16} className="text-primary mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{item.label}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="font-medium text-foreground">{item.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         {item.detail && <span className="capitalize"> · {item.detail}</span>}
                       </p>

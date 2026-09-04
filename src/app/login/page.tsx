@@ -58,7 +58,7 @@ function LoginPageInner() {
         router.push(redirect);
       }
     }
-  }, [isAuthenticated, loading, user, selectedCompanyId, userCompanies, router, searchParams, setSelectedCompany]);
+  }, [isAuthenticated, loading, user, selectedCompanyId, userCompanies, companies, router, searchParams, setSelectedCompany]);
 
   // Show company selection if user has multiple companies
   const showCompanySelection = !loading && isAuthenticated && user && userCompanies.length > 1;
@@ -95,10 +95,9 @@ function LoginPageInner() {
       setIsSubmitting(true);
       setErrorMessage(null);
       await login(data);
-      // Redirect will happen via useEffect after login
     } catch (error) {
-      const err = error as any;
-      setErrorMessage(err.message || 'Login failed. Please try again.');
+      setErrorMessage(error instanceof Error ? error.message : 'Login failed. Please try again.');
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -106,7 +105,7 @@ function LoginPageInner() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -114,15 +113,15 @@ function LoginPageInner() {
   // Show company selection for users with multiple companies
   if (showCompanySelection && userCompanies.length > 1) {
     return (
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-md mx-auto">
+      <div className="bg-card rounded-lg shadow-xl p-8 max-w-md mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Select Your Company</h1>
-          <p className="text-gray-600">You have access to multiple companies</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Select Your Company</h1>
+          <p className="text-muted-foreground">You have access to multiple companies</p>
         </div>
 
         {errorMessage && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{errorMessage}</p>
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-destructive text-sm">{errorMessage}</p>
           </div>
         )}
 
@@ -133,19 +132,19 @@ function LoginPageInner() {
               onClick={() => handleCompanySelect(company.company_id)}
               className={`w-full p-4 text-left border-2 rounded-lg transition-all ${
                 company.is_primary
-                  ? 'border-blue-500 bg-blue-50 hover:border-blue-600'
-                  : 'border-gray-200 hover:border-blue-500 hover:bg-blue-50'
+                  ? 'border-primary bg-accent hover:border-primary'
+                  : 'border-border hover:border-primary hover:bg-accent'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-gray-900">{company.company_name}</p>
+                  <p className="font-semibold text-foreground">{company.company_name}</p>
                   {company.is_primary && (
-                    <p className="text-xs text-blue-600 font-medium">Primary Company</p>
+                    <p className="text-xs text-primary font-medium">Primary Company</p>
                   )}
                 </div>
                 <div className={`w-5 h-5 rounded-full border-2 ${
-                  company.is_primary ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                  company.is_primary ? 'border-primary bg-primary' : 'border-input'
                 }`}></div>
               </div>
             </button>
@@ -156,55 +155,55 @@ function LoginPageInner() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-xl p-8 max-w-md mx-auto">
+    <div className="bg-card rounded-lg shadow-xl p-8 max-w-md mx-auto">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-        <p className="text-gray-600">Sign in to your {BRANDING.shortName} account</p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Welcome Back</h1>
+        <p className="text-muted-foreground">Sign in to your {BRANDING.shortName} account</p>
       </div>
 
       {errorMessage && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-700 text-sm">{errorMessage}</p>
+        <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+          <p className="text-destructive text-sm">{errorMessage}</p>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
             Email Address
           </label>
           <input
             {...register('email')}
             type="email"
             id="email"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+            className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent outline-none transition"
             placeholder="you@example.com"
           />
           {errors.email && (
-            <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.email.message}</p>
           )}
         </div>
 
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
             Password
           </label>
           <input
             {...register('password')}
             type="password"
             id="password"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+            className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent outline-none transition"
             placeholder="••••••••"
           />
           {errors.password && (
-            <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+            <p className="mt-1 text-sm text-destructive">{errors.password.message}</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+          className="w-full bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground font-semibold py-2 px-4 rounded-lg transition duration-200"
         >
           {isSubmitting ? 'Signing in...' : 'Sign In'}
         </button>
@@ -215,7 +214,7 @@ function LoginPageInner() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" /></div>}>
       <LoginPageInner />
     </Suspense>
   );

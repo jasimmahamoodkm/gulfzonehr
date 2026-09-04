@@ -5,7 +5,7 @@
  * Wrapper component to guard routes/sections by permission
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { checkPermission } from '@/lib/rbac';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -27,34 +27,42 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
   const { user } = useAuth();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const checkAccess = useCallback(async () => {
-    if (!user?.id || !user?.company_id) {
-      setHasPermission(false);
-      setLoading(false);
-      onDenied?.();
-      return;
-    }
-
-    try {
-      const result = await checkPermission(user.id, user.company_id, resource, action);
-      setHasPermission(result.allowed);
-
-      if (!result.allowed) {
-        onDenied?.();
-      }
-    } catch (error) {
-      console.error('Error checking permission:', error);
-      setHasPermission(false);
-      onDenied?.();
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id, user?.company_id, resource, action, onDenied]);
+  const onDeniedRef = useRef(onDenied);
+  onDeniedRef.current = onDenied;
 
   useEffect(() => {
+    let cancelled = false;
+
+    const checkAccess = async () => {
+      if (!user?.id || !user?.company_id) {
+        if (!cancelled) {
+          setHasPermission(false);
+          setLoading(false);
+        }
+        onDeniedRef.current?.();
+        return;
+      }
+
+      try {
+        const result = await checkPermission(user.id, user.company_id, resource, action);
+        if (cancelled) return;
+        setHasPermission(result.allowed);
+        if (!result.allowed) onDeniedRef.current?.();
+      } catch (error) {
+        console.error('Error checking permission:', error);
+        if (cancelled) return;
+        setHasPermission(false);
+        onDeniedRef.current?.();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
     checkAccess();
-  }, [checkAccess]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.company_id, resource, action]);
 
   if (loading) {
     return <div className="flex items-center justify-center p-4">Loading...</div>;
@@ -64,7 +72,7 @@ export const PermissionGuard: React.FC<PermissionGuardProps> = ({
     return fallback ? (
       <>{fallback}</>
     ) : (
-      <div className="flex items-center justify-center p-4 text-red-600">
+      <div className="flex items-center justify-center p-4 text-destructive">
         <p>You do not have permission to access this section.</p>
       </div>
     );

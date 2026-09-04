@@ -16,6 +16,7 @@ import { Plus, Calendar, TrendingUp, Clock } from 'lucide-react';
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 const attendanceSchema = z.object({
   employee_id: z.string().min(1, 'Employee is required'),
@@ -31,6 +32,7 @@ type AttendanceFormData = z.infer<typeof attendanceSchema>;
 const AttendancePage: React.FC = () => {
   const { selectedCompany } = useCompany();
   const { user } = useAuth();
+  const schedule = useTimeouts();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showModal, setShowModal] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
@@ -49,13 +51,16 @@ const AttendancePage: React.FC = () => {
   const [myEmployeeId, setMyEmployeeId] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!isManager || !user?.id) return;
+    let cancelled = false;
     supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
-      .then(({ data }) => { if (data) setMyEmployeeId(data.id); });
+      .then(({ data }) => { if (!cancelled && data) setMyEmployeeId(data.id); });
+    return () => { cancelled = true; };
   }, [isManager, user?.id]);
 
   // Get current employee record if user is an employee
   const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
   React.useEffect(() => {
+    let cancelled = false;
     const getEmployeeId = async () => {
       if (isEmployee && user?.id) {
         try {
@@ -64,7 +69,7 @@ const AttendancePage: React.FC = () => {
             .select('id')
             .eq('user_id', user.id)
             .single();
-          if (empData) {
+          if (!cancelled && empData) {
             setCurrentEmployeeId(empData.id);
           }
         } catch (err) {
@@ -73,6 +78,7 @@ const AttendancePage: React.FC = () => {
       }
     };
     getEmployeeId();
+    return () => { cancelled = true; };
   }, [isEmployee, user?.id]);
 
   const {
@@ -182,7 +188,7 @@ const AttendancePage: React.FC = () => {
       reset();
       setShowModal(false);
       fetchAttendance(selectedDate);
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       const errMsg = (err as any)?.message || 'Failed to record attendance';
       setMessage({ type: 'error', text: errMsg });
@@ -207,12 +213,12 @@ const AttendancePage: React.FC = () => {
     {
       label: 'Absent',
       value: attendanceRecords.filter((r) => r.status === 'Absent').length,
-      color: 'bg-red-100 text-red-600',
+      color: 'bg-destructive/15 text-destructive',
     },
     {
       label: 'On Leave',
       value: attendanceRecords.filter((r) => r.status === 'On Leave').length,
-      color: 'bg-blue-100 text-blue-600',
+      color: 'bg-accent text-primary',
     },
   ];
 
@@ -249,8 +255,8 @@ const AttendancePage: React.FC = () => {
               : value === 'Late'
               ? 'bg-orange-100 text-orange-800'
               : value === 'Absent'
-              ? 'bg-red-100 text-red-800'
-              : 'bg-gray-100 text-gray-800'
+              ? 'bg-destructive/15 text-red-800'
+              : 'bg-secondary text-secondary-foreground'
           }`}
         >
           {value}
@@ -265,10 +271,10 @@ const AttendancePage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl font-bold text-foreground">
               {isEmployee ? 'My Attendance' : 'Attendance Management'}
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-muted-foreground mt-1">
               {isEmployee
                 ? 'View your attendance records'
                 : selectedCompany ? `Track attendance at ${selectedCompany.name}` : 'Select a company to track attendance'}
@@ -288,8 +294,8 @@ const AttendancePage: React.FC = () => {
         </div>
 
         {!selectedCompany && (
-          <Card className="bg-blue-50 border border-blue-200">
-            <p className="text-blue-700 text-center py-4">Please select a company from the header to view attendance records</p>
+          <Card className="bg-accent border border-primary/20">
+            <p className="text-primary text-center py-4">Please select a company from the header to view attendance records</p>
           </Card>
         )}
 
@@ -298,7 +304,7 @@ const AttendancePage: React.FC = () => {
         {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center py-8">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
           </div>
         )}
 
@@ -307,13 +313,13 @@ const AttendancePage: React.FC = () => {
         {/* Date Selector */}
         <Card>
           <div className="flex items-center gap-4">
-            <Calendar size={20} className="text-gray-600" />
+            <Calendar size={20} className="text-muted-foreground" />
             <DatePicker
               value={selectedDate}
               onChange={(date) => setSelectedDate(date)}
               placeholder="Select attendance date"
             />
-            <span className="text-gray-600 text-sm">
+            <span className="text-muted-foreground text-sm">
               Viewing records for {new Date(selectedDate).toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
@@ -330,8 +336,8 @@ const AttendancePage: React.FC = () => {
             <Card key={stat.label}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-600 text-sm mb-2">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-muted-foreground text-sm mb-2">{stat.label}</p>
+                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
                 </div>
                 <div className={`${stat.color} p-3 rounded-lg`}>
                   <TrendingUp size={24} />
@@ -344,7 +350,7 @@ const AttendancePage: React.FC = () => {
         {/* Attendance Table */}
         <Card header={<h2 className="text-lg font-semibold">Attendance Records</h2>} noPadding>
           {attendanceRecords.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
               No attendance records for this date
             </div>
           ) : (
@@ -387,14 +393,14 @@ const AttendancePage: React.FC = () => {
             <div className={`p-3 rounded-lg ${
               message.type === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-destructive/10 border border-destructive/20 text-destructive'
             }`}>
               {message.text}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Employee</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Employee</label>
             <SelectMenu
               value={watch('employee_id') || ''}
               onChange={(v) => setValue('employee_id', v, { shouldValidate: true })}
@@ -402,12 +408,12 @@ const AttendancePage: React.FC = () => {
               options={employees.map((emp) => ({ value: emp.id, label: `${emp.first_name} ${emp.last_name}` }))}
             />
             {errors.employee_id && (
-              <p className="mt-1 text-sm text-red-600">{errors.employee_id.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.employee_id.message}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+            <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
               <Calendar size={16} />
               Date
             </label>
@@ -417,13 +423,13 @@ const AttendancePage: React.FC = () => {
               placeholder="Select date"
             />
             {errors.date && (
-              <p className="mt-1 text-sm text-red-600">{errors.date.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.date.message}</p>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
                 <Clock size={16} />
                 Check In
               </label>
@@ -434,7 +440,7 @@ const AttendancePage: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-2">
                 <Clock size={16} />
                 Check Out
               </label>
@@ -447,7 +453,7 @@ const AttendancePage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Status</label>
             <SelectMenu
               value={watch('status') || ''}
               onChange={(v) => setValue('status', v as AttendanceFormData['status'], { shouldValidate: true })}
@@ -455,16 +461,16 @@ const AttendancePage: React.FC = () => {
               options={['Present', 'Late', 'Absent', 'On Leave', 'Half-Day'].map(s => ({ value: s, label: s }))}
             />
             {errors.status && (
-              <p className="mt-1 text-sm text-red-600">{errors.status.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.status.message}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Notes</label>
             <textarea
               {...register('notes')}
               placeholder="Add any notes"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
               rows={3}
             />
           </div>

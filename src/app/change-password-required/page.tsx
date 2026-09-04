@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useTimeouts } from '@/hooks/useTimeouts';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { Eye, EyeOff, Lock } from 'lucide-react';
@@ -29,6 +30,7 @@ export default function ChangePasswordRequiredPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const schedule = useTimeouts();
 
   const {
     register,
@@ -53,11 +55,11 @@ export default function ChangePasswordRequiredPage() {
 
       reset();
 
-      setTimeout(() => {
+      schedule(() => {
         router.push('/employee-dashboard');
       }, 1500);
     } catch (err) {
-      const errMsg = (err as any)?.message || 'Failed to change password';
+      const errMsg = err instanceof Error ? err.message : 'Failed to change password';
       console.error('Error changing password:', err);
       setMessage({ type: 'error', text: errMsg });
     } finally {
@@ -79,12 +81,12 @@ export default function ChangePasswordRequiredPage() {
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-blue-100 rounded-full">
-              <Lock size={32} className="text-blue-600" />
+            <div className="p-3 bg-accent rounded-full">
+              <Lock size={32} className="text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Change Your Password</h1>
-          <p className="text-gray-600">You must change your temporary password before you can access the system</p>
+          <h1 className="text-2xl font-bold text-foreground">Change Your Password</h1>
+          <p className="text-muted-foreground">You must change your temporary password before you can access the system</p>
         </div>
 
         {/* Alert */}
@@ -100,7 +102,7 @@ export default function ChangePasswordRequiredPage() {
             className={`p-4 rounded-lg ${
               message.type === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-destructive/10 border border-destructive/20 text-destructive'
             }`}
           >
             {message.text}
@@ -111,7 +113,7 @@ export default function ChangePasswordRequiredPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* New Password */}
           <div>
-            <label htmlFor="new_password" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="new_password" className="block text-sm font-medium text-foreground mb-2">
               New Password
             </label>
             <div className="relative">
@@ -120,24 +122,24 @@ export default function ChangePasswordRequiredPage() {
                 id="new_password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your new password"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-2.5 text-muted-foreground hover:text-muted-foreground"
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
             {errors.new_password && (
-              <p className="mt-1 text-sm text-red-600">{errors.new_password.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.new_password.message}</p>
             )}
           </div>
 
           {/* Confirm Password */}
           <div>
-            <label htmlFor="confirm_password" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="confirm_password" className="block text-sm font-medium text-foreground mb-2">
               Confirm Password
             </label>
             <div className="relative">
@@ -146,18 +148,18 @@ export default function ChangePasswordRequiredPage() {
                 id="confirm_password"
                 type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="Confirm your new password"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-2.5 text-muted-foreground hover:text-muted-foreground"
               >
                 {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
             {errors.confirm_password && (
-              <p className="mt-1 text-sm text-red-600">{errors.confirm_password.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.confirm_password.message}</p>
             )}
           </div>
 
@@ -173,9 +175,9 @@ export default function ChangePasswordRequiredPage() {
         </form>
 
         {/* Password Requirements */}
-        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <p className="text-sm font-semibold text-blue-900 mb-2">Password Requirements:</p>
-          <ul className="text-sm text-blue-800 space-y-1">
+        <div className="p-4 bg-accent rounded-lg border border-primary/20">
+          <p className="text-sm font-semibold text-accent-foreground mb-2">Password Requirements:</p>
+          <ul className="text-sm text-primary space-y-1">
             <li>✓ At least 6 characters long</li>
             <li>✓ Mix of uppercase and lowercase letters</li>
             <li>✓ Include numbers and special characters for better security</li>

@@ -45,18 +45,20 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
     : placeholder;
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
     };
   }, [isOpen]);
 
@@ -66,16 +68,16 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left disabled:bg-gray-50 disabled:cursor-not-allowed"
+        className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-card flex items-center justify-between text-left disabled:bg-muted disabled:cursor-not-allowed"
       >
-        <span className={value ? 'text-gray-900' : 'text-gray-500'}>
+        <span className={value ? 'text-foreground' : 'text-muted-foreground'}>
           {displayValue}
         </span>
-        <Calendar size={18} className="text-gray-400" />
+        <Calendar size={18} className="text-muted-foreground" />
       </button>
 
       {isOpen && !disabled && (
-        <div className="absolute top-full left-0 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-4 min-w-80">
+        <div className="absolute top-full left-0 mt-2 bg-card border border-input rounded-lg shadow-lg z-50 p-4 min-w-80">
           <div className="space-y-4">
             {/* Year Selector */}
             <div>
@@ -83,15 +85,15 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
                 <button
                   type="button"
                   onClick={() => setYear(year - 1)}
-                  className="p-1 hover:bg-gray-100 rounded transition"
+                  className="p-1 hover:bg-muted rounded transition"
                 >
                   <ChevronLeft size={20} />
                 </button>
-                <span className="text-lg font-bold text-gray-900">{year}</span>
+                <span className="text-lg font-bold text-foreground">{year}</span>
                 <button
                   type="button"
                   onClick={() => setYear(year + 1)}
-                  className="p-1 hover:bg-gray-100 rounded transition"
+                  className="p-1 hover:bg-muted rounded transition"
                 >
                   <ChevronRight size={20} />
                 </button>
@@ -107,8 +109,8 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
                   onClick={() => handleMonthSelect(idx)}
                   className={`py-2 px-3 rounded-lg text-sm font-medium transition ${
                     month === idx
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                   }`}
                 >
                   {m.slice(0, 3)}
@@ -119,7 +121,7 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+              className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition text-sm font-medium"
             >
               Done
             </button>

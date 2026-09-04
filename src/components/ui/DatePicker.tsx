@@ -85,24 +85,23 @@ const DatePicker: React.FC<DatePickerProps> = ({
   };
 
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-
-      // Check if click is outside both the button and the dropdown
       const isOutsideButton = containerRef.current && !containerRef.current.contains(target);
       const isOutsideDropdown = dropdownRef.current && !dropdownRef.current.contains(target);
-
-      if (isOutsideButton && isOutsideDropdown) {
-        setIsOpen(false);
-      }
+      if (isOutsideButton && isOutsideDropdown) setIsOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
     };
   }, [isOpen]);
 
@@ -112,18 +111,18 @@ const DatePicker: React.FC<DatePickerProps> = ({
         type="button"
         onClick={toggleOpen}
         disabled={disabled}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white flex items-center justify-between text-left disabled:bg-gray-50 disabled:cursor-not-allowed"
+        className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-card flex items-center justify-between text-left disabled:bg-muted disabled:cursor-not-allowed"
       >
-        <span className={displayValue ? 'text-gray-900' : 'text-gray-500'}>
+        <span className={displayValue ? 'text-foreground' : 'text-muted-foreground'}>
           {displayValue || placeholder}
         </span>
-        <Calendar size={18} className="text-gray-400" />
+        <Calendar size={18} className="text-muted-foreground" />
       </button>
 
       {isOpen && !disabled && (
         <div
           ref={dropdownRef}
-          className="fixed bg-white border border-gray-300 rounded-lg shadow-2xl p-4"
+          className="fixed bg-card border border-input rounded-lg shadow-2xl p-4"
           style={{
             top: `${dropdownPos.top}px`,
             left: `${dropdownPos.left}px`,
@@ -133,32 +132,32 @@ const DatePicker: React.FC<DatePickerProps> = ({
         >
           <style>{`
             .rdp-root {
-              --rdp-accent-color: #3b82f6;
-              --rdp-accent-background-color: #dbeafe;
+              --rdp-accent-color: var(--primary);
+              --rdp-accent-background-color: var(--accent);
               --rdp-day-width: 36px;
               --rdp-day-height: 36px;
-              --rdp-today-color: #3b82f6;
+              --rdp-today-color: var(--primary);
               margin: 0;
             }
             .rdp-months { justify-content: center; }
             .rdp-weekday {
               font-weight: 600;
-              color: #374151;
+              color: var(--muted-foreground);
               text-transform: uppercase;
               font-size: 0.75rem;
             }
             .rdp-day_button { border-radius: 0.375rem; font-size: 0.875rem; }
             .rdp-selected .rdp-day_button {
-              background-color: #3b82f6;
-              color: #fff;
+              background-color: var(--primary);
+              color: var(--primary-foreground);
               font-weight: 600;
               border: none;
             }
-            .rdp-today:not(.rdp-outside) .rdp-day_button { font-weight: 700; color: #3b82f6; }
+            .rdp-today:not(.rdp-outside) .rdp-day_button { font-weight: 700; color: var(--primary); }
             .rdp-disabled { opacity: 0.4; }
             .rdp-month_caption {
               font-weight: 600;
-              color: #111827;
+              color: var(--foreground);
               font-size: 0.875rem;
               padding: 0.25rem 0 0.75rem;
             }
@@ -168,19 +167,19 @@ const DatePicker: React.FC<DatePickerProps> = ({
           <div className="mb-4 space-y-3">
             {/* Year Selector */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Year</label>
+              <label className="block text-xs font-medium text-foreground mb-2">Year</label>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setSelectedYear(selectedYear - 1)}
-                  className="p-1 hover:bg-gray-100 rounded transition"
+                  className="p-1 hover:bg-muted rounded transition"
                 >
                   <ChevronLeft size={18} />
                 </button>
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="flex-1 px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                  className="flex-1 px-2 py-1 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-card text-sm"
                 >
                   {YEAR_OPTIONS.map((year) => (
                     <option key={year} value={year}>
@@ -191,7 +190,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedYear(selectedYear + 1)}
-                  className="p-1 hover:bg-gray-100 rounded transition"
+                  className="p-1 hover:bg-muted rounded transition"
                 >
                   <ChevronRight size={18} />
                 </button>
@@ -200,11 +199,11 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
             {/* Month Selector */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Month</label>
+              <label className="block text-xs font-medium text-foreground mb-2">Month</label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                className="w-full px-3 py-1 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-card text-sm"
               >
                 <option value={0}>January</option>
                 <option value={1}>February</option>

@@ -33,7 +33,7 @@ const DATE_RANGES: Record<string, string> = {
 };
 const STATUSES = ['Active', 'On Leave', 'Inactive', 'Archived'];
 const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract'];
-const inputCls = 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white';
+const inputCls = 'w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-card';
 
 function rangeToDates(key: string): { from: string | null; to: string | null } {
   const to = new Date();
@@ -240,27 +240,27 @@ const ReportsPage: React.FC = () => {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reports</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-foreground">Reports</h1>
+          <p className="text-muted-foreground mt-1">
             {selectedCompany ? `Generate and export reports for ${selectedCompany.name}` : 'Select a company to generate reports'}
           </p>
         </div>
 
         {!selectedCompany ? (
-          <Card className="bg-blue-50 border border-blue-200">
-            <p className="text-blue-700 text-center py-4">Please select a company from the header to generate reports</p>
+          <Card className="bg-accent border border-primary/20">
+            <p className="text-primary text-center py-4">Please select a company from the header to generate reports</p>
           </Card>
         ) : (
           <>
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">{error}</div>
             )}
 
             {/* Filters */}
             <Card>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Date Range</label>
                   <select value={dateRange} onChange={(e) => setDateRange(e.target.value)} className={inputCls}>
                     {Object.entries(DATE_RANGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
@@ -268,42 +268,42 @@ const ReportsPage: React.FC = () => {
                 {dateRange === 'custom' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">From</label>
+                      <label className="block text-sm font-medium text-foreground mb-2">From</label>
                       <input type="date" value={customFrom} max={customTo || undefined}
                         onChange={(e) => setCustomFrom(e.target.value)} className={inputCls} />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
+                      <label className="block text-sm font-medium text-foreground mb-2">To</label>
                       <input type="date" value={customTo} min={customFrom || undefined}
                         onChange={(e) => setCustomTo(e.target.value)} className={inputCls} />
                     </div>
                   </>
                 )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Department</label>
                   <select value={department} onChange={(e) => setDepartment(e.target.value)} className={inputCls}>
                     <option value="all">All Departments</option>
                     {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Status</label>
                   <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputCls}>
                     <option value="all">All Statuses</option>
                     {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Employment Type</label>
                   <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value)} className={inputCls}>
                     <option value="all">All Types</option>
                     {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Company</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Company</label>
                   <input readOnly value={selectedCompany.name}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600" />
+                    className="w-full px-4 py-2 border border-border rounded-lg bg-muted text-muted-foreground" />
                 </div>
               </div>
             </Card>
@@ -315,12 +315,12 @@ const ReportsPage: React.FC = () => {
                   <div className="space-y-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">{report.title}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{report.description}</p>
+                        <h3 className="text-lg font-semibold text-foreground">{report.title}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">{report.description}</p>
                       </div>
-                      <div className="p-2 bg-blue-100 rounded-lg"><BarChart3 size={20} className="text-blue-600" /></div>
+                      <div className="p-2 bg-accent rounded-lg"><BarChart3 size={20} className="text-primary" /></div>
                     </div>
-                    <div className="pt-4 border-t border-gray-200">
+                    <div className="pt-4 border-t border-border">
                       <Button variant="primary" size="sm" className="w-full gap-2"
                         onClick={() => generate(report)} disabled={generating !== null}>
                         <Download size={16} />
@@ -340,7 +340,7 @@ const ReportsPage: React.FC = () => {
         {result && (
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 {result.rows.length} row(s) · {DATE_RANGES[dateRange]}
                 {dateRange === 'custom' && customFrom && ` (${customFrom} → ${customTo || 'now'})`}
                 {department !== 'all' && ` · ${department}`}
@@ -352,17 +352,17 @@ const ReportsPage: React.FC = () => {
               </Button>
             </div>
             {result.rows.length === 0 ? (
-              <p className="text-sm text-gray-500 py-8 text-center">No data for this report / period.</p>
+              <p className="text-sm text-muted-foreground py-8 text-center">No data for this report / period.</p>
             ) : (
-              <div className="overflow-auto max-h-[65vh] border border-gray-200 rounded-lg">
+              <div className="overflow-auto max-h-[65vh] border border-border rounded-lg">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>{result.columns.map((c) => <th key={c} className="text-left px-3 py-2 font-medium text-gray-600 whitespace-nowrap">{c}</th>)}</tr>
+                  <thead className="bg-muted sticky top-0">
+                    <tr>{result.columns.map((c) => <th key={c} className="text-left px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">{c}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y">
                     {result.rows.slice(0, 100).map((row, i) => (
                       <tr key={i}>
-                        {result.columns.map((c) => <td key={c} className="px-3 py-1.5 text-gray-800 whitespace-nowrap">{String(row[c] ?? '')}</td>)}
+                        {result.columns.map((c) => <td key={c} className="px-3 py-1.5 text-foreground whitespace-nowrap">{String(row[c] ?? '')}</td>)}
                       </tr>
                     ))}
                   </tbody>
@@ -370,7 +370,7 @@ const ReportsPage: React.FC = () => {
               </div>
             )}
             {result.rows.length > 100 && (
-              <p className="text-xs text-gray-400">Showing first 100 rows — the CSV export contains all {result.rows.length}.</p>
+              <p className="text-xs text-muted-foreground">Showing first 100 rows — the CSV export contains all {result.rows.length}.</p>
             )}
           </div>
         )}

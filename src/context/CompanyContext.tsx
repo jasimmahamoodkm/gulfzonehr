@@ -20,9 +20,14 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Track the last userId we loaded for — avoid re-fetching for the same user
   const loadedForUser = useRef<string | null>(null);
 
+  const fetchGen = useRef(0);
+
   const fetchCompanies = useCallback(async (userId: string) => {
     // Skip if already loaded for this user
     if (loadedForUser.current === userId) return;
+
+    const gen = ++fetchGen.current;
+    const stillCurrent = () => gen === fetchGen.current;
 
     try {
       setLoading(true);
@@ -33,13 +38,17 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .from('user_roles')
         .select('roles(name)')
         .eq('user_id', userId);
-      const isSuperAdmin = (roleRows || []).some((r: any) => r.roles?.name === 'Super Admin');
+      if (!stillCurrent()) return;
+      const isSuperAdmin = (roleRows || []).some(
+        (r) => (r.roles as { name?: string } | null)?.name === 'Super Admin',
+      );
 
       if (isSuperAdmin) {
         const { data: allCompanies } = await supabase
           .from('companies')
           .select('*')
           .order('name', { ascending: true });
+        if (!stillCurrent()) return;
         if (allCompanies && allCompanies.length > 0) {
           setCompanies(allCompanies as unknown as Company[]);
           // Default to the admin's primary assigned company (if any), else the
@@ -50,10 +59,11 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
             .eq('user_id', userId)
             .eq('is_primary', true)
             .maybeSingle();
+          if (!stillCurrent()) return;
           const defaultCompany =
-            (primaryUc?.company_id && allCompanies.find((c: any) => c.id === primaryUc.company_id)) ||
+            (primaryUc?.company_id && allCompanies.find((c) => c.id === primaryUc.company_id)) ||
             allCompanies[0];
-          setSelectedCompanyState(prev => prev ?? (defaultCompany as unknown as Company));
+          setSelectedCompanyState((prev) => prev ?? (defaultCompany as unknown as Company));
           return;
         }
       }
@@ -64,16 +74,17 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .select('is_primary, companies(*)')
         .eq('user_id', userId)
         .order('is_primary', { ascending: false });
+      if (!stillCurrent()) return;
 
       if (!ucError && ucData && ucData.length > 0) {
         const userCompanies = ucData
-          .map(uc => uc.companies as unknown as Company)
+          .map((uc) => uc.companies as unknown as Company)
           .filter(Boolean);
 
         setCompanies(userCompanies);
 
         // Primary company comes first due to ordering
-        const primaryRow = ucData.find(uc => uc.is_primary) ?? ucData[0];
+        const primaryRow = ucData.find((uc) => uc.is_primary) ?? ucData[0];
         const primaryCompany = primaryRow?.companies as unknown as Company;
         if (primaryCompany) setSelectedCompanyState(primaryCompany);
         return;
@@ -85,6 +96,7 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .select('companies(*)')
         .eq('id', userId)
         .single();
+      if (!stillCurrent()) return;
 
       if (userData?.companies) {
         const company = userData.companies as unknown as Company;
@@ -93,15 +105,18 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     } catch (err) {
       console.error('CompanyContext error:', err);
-      loadedForUser.current = null; // allow retry on error
+      if (stillCurrent()) loadedForUser.current = null; // allow retry on error
     } finally {
-      setLoading(false);
+      if (stillCurrent()) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     // Run once on mount for users who are already logged in (e.g. page refresh)
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
       if (session?.user?.id) {
         fetchCompanies(session.user.id);
       } else {
@@ -111,11 +126,11 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Re-run whenever auth state changes (login / logout / token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
       if (event === 'SIGNED_IN' && session?.user?.id) {
-        // User just logged in — load their companies
         fetchCompanies(session.user.id);
       } else if (event === 'SIGNED_OUT') {
-        // Clear company state on logout
+        fetchGen.current += 1;
         setCompanies([]);
         setSelectedCompanyState(null);
         loadedForUser.current = null;
@@ -123,7 +138,11 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      fetchGen.current += 1;
+      subscription.unsubscribe();
+    };
   }, [fetchCompanies]);
 
   const handleSetSelectedCompany = useCallback((company: Company | null) => {

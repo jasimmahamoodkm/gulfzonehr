@@ -85,9 +85,9 @@ export default function AuditLogsPage() {
       case 'success':
         return 'bg-green-100 text-green-800';
       case 'failure':
-        return 'bg-red-100 text-red-800';
+        return 'bg-destructive/15 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-secondary text-secondary-foreground';
     }
   };
 
@@ -97,16 +97,16 @@ export default function AuditLogsPage() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Audit Logs</h1>
-          <p className="text-gray-600 mt-2">Track all system activities and changes</p>
+          <h1 className="text-3xl font-bold text-foreground">Audit Logs</h1>
+          <p className="text-muted-foreground mt-2">Track all system activities and changes</p>
         </div>
 
         {/* Filters */}
         <Card className="p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Filters</h3>
+          <h3 className="font-semibold text-foreground mb-4">Filters</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Action
               </label>
               <Input
@@ -117,7 +117,7 @@ export default function AuditLogsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Resource Type
               </label>
               <Input
@@ -128,13 +128,13 @@ export default function AuditLogsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Status
               </label>
               <select
                 value={filters.status || ''}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFilterChange('status', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">All</option>
                 <option value="success">Success</option>
@@ -142,7 +142,7 @@ export default function AuditLogsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 From Date
               </label>
               <DatePicker
@@ -152,7 +152,7 @@ export default function AuditLogsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 To Date
               </label>
               <DatePicker
@@ -168,54 +168,54 @@ export default function AuditLogsPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-muted border-b border-border">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                     Timestamp
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                     Action
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                     Resource Type
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                     Resource
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">
                     IP Address
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
                       Loading...
                     </td>
                   </tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
                       No audit logs found
                     </td>
                   </tr>
                 ) : (
                   logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-900">
+                    <tr key={log.id} className="hover:bg-muted">
+                      <td className="px-6 py-4 text-sm text-foreground">
                         {formatDate(log.created_at)}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                      <td className="px-6 py-4 text-sm text-foreground font-medium">
                         {log.action}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
                         {log.resource_type}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
                         {log.resource_name || log.resource_id || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm">
@@ -227,7 +227,7 @@ export default function AuditLogsPage() {
                           {log.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
                         {log.ip_address || '-'}
                       </td>
                     </tr>
@@ -239,8 +239,8 @@ export default function AuditLogsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-              <div className="text-sm text-gray-600">
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border">
+              <div className="text-sm text-muted-foreground">
                 Showing {(page - 1) * ITEMS_PER_PAGE + 1} to{' '}
                 {Math.min(page * ITEMS_PER_PAGE, totalLogs)} of {totalLogs} logs
               </div>
@@ -248,7 +248,7 @@ export default function AuditLogsPage() {
                 <button
                   onClick={() => setPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  className="px-4 py-2 border border-input rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted"
                 >
                   Previous
                 </button>
@@ -258,7 +258,7 @@ export default function AuditLogsPage() {
                 <button
                   onClick={() => setPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  className="px-4 py-2 border border-input rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted"
                 >
                   Next
                 </button>

@@ -51,35 +51,38 @@ export default function PromotionRequestModal({
   const employeeId = employee?.id;
 
   const loadBenefits = useCallback(async () => {
-    if (!employeeId) return;
+    if (!employeeId) return [] as BenefitEdit[];
     setBenefitsLoading(true);
     try {
       const rows = await getMergedBenefits(supabase, employeeId, currentGradeId);
-      setBenefitEdits(rows.map(r => ({
+      return rows.map((r) => ({
         benefit_type: r.benefit_type,
         current_value: r.benefit_value,
         current_value_type: (r.value_type as 'fixed' | 'percentage') || 'fixed',
         new_value: r.benefit_value,
         value_type: (r.value_type as 'fixed' | 'percentage') || 'fixed',
-        action: 'none',
+        action: 'none' as BenefitAction,
         isCustom: false,
-      })));
+      }));
     } catch {
-      setBenefitEdits([]);
-    } finally {
-      setBenefitsLoading(false);
+      return [] as BenefitEdit[];
     }
   }, [employeeId, currentGradeId]);
 
   // Reset whenever a new employee is targeted, and preload their benefits.
   useEffect(() => {
-    if (isOpen) {
-      setChangeGrade(false); setRequestedGradeId('');
-      setChangeSalary(false); setRequestedSalary(currentSalary != null ? String(currentSalary) : '');
-      setChangeBenefits(false);
-      setReason(''); setError(null);
-      loadBenefits();
-    }
+    if (!isOpen) return;
+    let cancelled = false;
+    setChangeGrade(false); setRequestedGradeId('');
+    setChangeSalary(false); setRequestedSalary(currentSalary != null ? String(currentSalary) : '');
+    setChangeBenefits(false);
+    setReason(''); setError(null);
+    loadBenefits().then((rows) => {
+      if (cancelled) return;
+      setBenefitEdits(rows || []);
+      setBenefitsLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [isOpen, currentSalary, loadBenefits]);
 
   if (!employee) return null;
@@ -150,17 +153,17 @@ export default function PromotionRequestModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Promotion / Demotion — ${employee.name}`}>
       <div className="space-y-5">
-        <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-600">
-          <div className="flex items-center gap-2 text-gray-800 font-medium mb-1">
-            <TrendingUp size={16} className="text-blue-600" /> Current
+        <div className="rounded-lg bg-muted border border-border p-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-foreground font-medium mb-1">
+            <TrendingUp size={16} className="text-primary" /> Current
           </div>
-          Grade: <span className="font-medium text-gray-900">{currentGradeName}</span>
-          {currentSalary != null && <> · Salary: <span className="font-medium text-gray-900">AED {currentSalary.toLocaleString()}</span></>}
+          Grade: <span className="font-medium text-foreground">{currentGradeName}</span>
+          {currentSalary != null && <> · Salary: <span className="font-medium text-foreground">AED {currentSalary.toLocaleString()}</span></>}
         </div>
 
         {/* Grade change */}
-        <div className="border border-gray-200 rounded-lg p-3">
-          <label className="flex items-center gap-2 font-medium text-gray-800">
+        <div className="border border-border rounded-lg p-3">
+          <label className="flex items-center gap-2 font-medium text-foreground">
             <input type="checkbox" checked={changeGrade} onChange={e => setChangeGrade(e.target.checked)} />
             Change grade
           </label>
@@ -169,7 +172,7 @@ export default function PromotionRequestModal({
               <select
                 value={requestedGradeId}
                 onChange={e => setRequestedGradeId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">Select new grade…</option>
                 {grades.filter(g => g.id !== currentGradeId).map(g => (
@@ -179,15 +182,15 @@ export default function PromotionRequestModal({
                 ))}
               </select>
               {newGradeSalary != null && (
-                <p className="text-xs text-gray-500 mt-1">New grade salary: AED {newGradeSalary.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground mt-1">New grade salary: AED {newGradeSalary.toLocaleString()}</p>
               )}
             </div>
           )}
         </div>
 
         {/* Salary change */}
-        <div className="border border-gray-200 rounded-lg p-3">
-          <label className="flex items-center gap-2 font-medium text-gray-800">
+        <div className="border border-border rounded-lg p-3">
+          <label className="flex items-center gap-2 font-medium text-foreground">
             <input type="checkbox" checked={changeSalary} onChange={e => setChangeSalary(e.target.checked)} />
             Change salary (keep grade)
           </label>
@@ -197,29 +200,29 @@ export default function PromotionRequestModal({
                 type="number" min="0" step="0.01" value={requestedSalary}
                 onChange={e => setRequestedSalary(e.target.value)}
                 placeholder="New basic salary (AED)"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-input rounded-lg px-3 py-2 text-sm"
               />
-              <p className="text-xs text-gray-500 mt-1">Applied as a per-employee override on approval.</p>
+              <p className="text-xs text-muted-foreground mt-1">Applied as a per-employee override on approval.</p>
             </div>
           )}
         </div>
 
         {/* Benefits change */}
-        <div className="border border-gray-200 rounded-lg p-3">
-          <label className="flex items-center gap-2 font-medium text-gray-800">
+        <div className="border border-border rounded-lg p-3">
+          <label className="flex items-center gap-2 font-medium text-foreground">
             <input type="checkbox" checked={changeBenefits} onChange={e => setChangeBenefits(e.target.checked)} />
             Change benefits (keep grade)
           </label>
           {changeBenefits && (
             <div className="mt-3">
               {benefitsLoading ? (
-                <p className="text-sm text-gray-500">Loading benefits…</p>
+                <p className="text-sm text-muted-foreground">Loading benefits…</p>
               ) : (
                 <>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-left text-xs text-gray-500 border-b border-gray-200">
+                        <tr className="text-left text-xs text-muted-foreground border-b border-border">
                           <th className="py-1.5 pr-2 font-medium">Benefit</th>
                           <th className="py-1.5 px-2 font-medium">Current</th>
                           <th className="py-1.5 px-2 font-medium">Action</th>
@@ -229,32 +232,32 @@ export default function PromotionRequestModal({
                       </thead>
                       <tbody>
                         {benefitEdits.length === 0 && (
-                          <tr><td colSpan={5} className="py-3 text-gray-500 italic">
+                          <tr><td colSpan={5} className="py-3 text-muted-foreground italic">
                             This grade has no benefits configured. Add one below.
                           </td></tr>
                         )}
                         {benefitEdits.map((b, i) => (
-                          <tr key={i} className="border-b border-gray-100 align-middle">
+                          <tr key={i} className="border-b border-border align-middle">
                             <td className="py-2 pr-2">
                               {b.isCustom ? (
                                 <input
                                   type="text" value={b.benefit_type}
                                   onChange={e => patchBenefit(i, { benefit_type: e.target.value })}
                                   placeholder="Benefit name"
-                                  className="w-full min-w-[120px] border border-gray-300 rounded px-2 py-1 text-sm"
+                                  className="w-full min-w-[120px] border border-input rounded px-2 py-1 text-sm"
                                 />
                               ) : (
-                                <span className="text-gray-900">{b.benefit_type}</span>
+                                <span className="text-foreground">{b.benefit_type}</span>
                               )}
                             </td>
-                            <td className="py-2 px-2 text-gray-500 whitespace-nowrap">
+                            <td className="py-2 px-2 text-muted-foreground whitespace-nowrap">
                               {fmtBenefit(b.current_value, b.current_value_type)}
                             </td>
                             <td className="py-2 px-2">
                               <select
                                 value={b.action}
                                 onChange={e => patchBenefit(i, { action: e.target.value as BenefitAction })}
-                                className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                className="border border-input rounded px-2 py-1 text-sm"
                               >
                                 {!b.isCustom && <option value="none">Keep</option>}
                                 <option value="update">Update</option>
@@ -267,24 +270,24 @@ export default function PromotionRequestModal({
                                   <input
                                     type="number" min="0" step="0.01" value={b.new_value}
                                     onChange={e => patchBenefit(i, { new_value: Number(e.target.value) })}
-                                    className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
+                                    className="w-24 border border-input rounded px-2 py-1 text-sm"
                                   />
                                   <select
                                     value={b.value_type}
                                     onChange={e => patchBenefit(i, { value_type: e.target.value as 'fixed' | 'percentage' })}
-                                    className="border border-gray-300 rounded px-1 py-1 text-sm"
+                                    className="border border-input rounded px-1 py-1 text-sm"
                                   >
                                     <option value="fixed">AED</option>
                                     <option value="percentage">%</option>
                                   </select>
                                 </div>
                               ) : (
-                                <span className="text-gray-400">—</span>
+                                <span className="text-muted-foreground">—</span>
                               )}
                             </td>
                             <td className="py-2">
                               {b.isCustom && (
-                                <button type="button" onClick={() => removeCustomBenefit(i)} className="p-1 text-gray-400 hover:text-red-600" title="Remove line">
+                                <button type="button" onClick={() => removeCustomBenefit(i)} className="p-1 text-muted-foreground hover:text-destructive" title="Remove line">
                                   <X size={16} />
                                 </button>
                               )}
@@ -294,7 +297,7 @@ export default function PromotionRequestModal({
                       </tbody>
                     </table>
                   </div>
-                  <button type="button" onClick={addCustomBenefit} className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
+                  <button type="button" onClick={addCustomBenefit} className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:text-primary">
                     <Plus size={14} /> Add another benefit
                   </button>
                 </>
@@ -305,15 +308,15 @@ export default function PromotionRequestModal({
 
         {/* Reason */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Reason / justification</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Reason / justification</label>
           <textarea
             value={reason} onChange={e => setReason(e.target.value)} rows={2}
             placeholder="Why is this change requested?"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-input rounded-lg px-3 py-2 text-sm"
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose} disabled={submitting}>Cancel</Button>
@@ -321,7 +324,7 @@ export default function PromotionRequestModal({
             {submitting ? 'Submitting…' : 'Submit request'}
           </Button>
         </div>
-        <p className="text-xs text-gray-400">Requires approval by an HR Manager or above (other than yourself).</p>
+        <p className="text-xs text-muted-foreground">Requires approval by an HR Manager or above (other than yourself).</p>
       </div>
     </Modal>
   );

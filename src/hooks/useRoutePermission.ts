@@ -3,7 +3,7 @@
  * Can be used in pages to verify access before rendering
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from './useAuth';
 import { useCompany } from '@/context/CompanyContext';
@@ -34,28 +34,26 @@ export const useRoutePermission = (): UseRoutePermissionResult => {
   const [isAuthorized, setIsAuthorized] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
-  const userRoles = user?.roles?.map(role => role.role_name || role.role_id) || [];
+  const userRoles = useMemo(
+    () => user?.roles?.map((role) => role.role_name || role.role_id) || [],
+    [user?.roles],
+  );
   const hasSelectedCompany = !!selectedCompany?.id;
 
   useEffect(() => {
     setIsLoading(true);
 
     try {
-      // Public routes are always accessible
       if (isPublicRoute(pathname)) {
         setIsAuthorized(true);
-        setIsLoading(false);
         return;
       }
 
-      // Private routes require authentication
       if (!isAuthenticated || !user) {
         setIsAuthorized(false);
-        setIsLoading(false);
         return;
       }
 
-      // Check route-specific permissions
       const routePermission = getRoutePermission(pathname);
       const hasAccess = hasRouteAccess(userRoles, routePermission, hasSelectedCompany);
 

@@ -25,7 +25,7 @@ const Table: React.FC<TableProps> = ({
   if (loading) {
     return (
       <div className="flex justify-center items-center py-8">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-muted-foreground">Loading...</div>
       </div>
     );
   }
@@ -34,11 +34,11 @@ const Table: React.FC<TableProps> = ({
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-gray-100 border-b border-gray-200">
+          <tr className="bg-muted border-b border-border">
             {columns.map((column) => (
               <th
                 key={column.key}
-                className="px-6 py-3 text-left text-sm font-semibold text-gray-900"
+                className="px-6 py-3 text-left text-sm font-semibold text-foreground"
                 style={{ width: column.width }}
               >
                 {column.label}
@@ -49,7 +49,7 @@ const Table: React.FC<TableProps> = ({
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-6 py-8 text-center text-gray-500">
+              <td colSpan={columns.length} className="px-6 py-8 text-center text-muted-foreground">
                 {emptyMessage}
               </td>
             </tr>
@@ -58,10 +58,10 @@ const Table: React.FC<TableProps> = ({
               <tr
                 key={idx}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                className={`border-b border-border hover:bg-muted transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
               >
                 {columns.map((column) => (
-                  <td key={column.key} className="px-6 py-4 text-sm text-gray-700">
+                  <td key={column.key} className="px-6 py-4 text-sm text-foreground">
                     {column.render ? column.render(row[column.key], row) : row[column.key]}
                   </td>
                 ))}

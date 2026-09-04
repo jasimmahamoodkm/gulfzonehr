@@ -9,6 +9,7 @@ import DatePicker from '@/components/ui/DatePicker';
 import { supabase } from '@/lib/supabase';
 import { EmployeeGrade, GradeLeaveConfig, GradeSalaryConfig, GradeBenefit, BenefitType } from '@/types/index';
 import { apiUrl } from '@/lib/api';
+import { useTimeouts } from '@/hooks/useTimeouts';
 import {
   ArrowLeft,
   Calendar,
@@ -55,6 +56,7 @@ export default function GradeDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('leave');
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const schedule = useTimeouts();
 
   // Leave tab state
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
@@ -99,7 +101,7 @@ export default function GradeDetailPage() {
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3500);
+    schedule(() => setNotification(null), 3500);
   };
 
   const getToken = async () => {
@@ -402,28 +404,28 @@ export default function GradeDetailPage() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.push('/admin/grades')}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <ArrowLeft size={20} />
           </button>
           <div className="flex-1 min-w-0">
             {loading ? (
-              <div className="h-7 bg-gray-200 rounded w-48 animate-pulse" />
+              <div className="h-7 bg-secondary rounded w-48 animate-pulse" />
             ) : (
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-2xl font-bold text-gray-900">{grade?.name}</h1>
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-sm font-medium">
+                <h1 className="text-2xl font-bold text-foreground">{grade?.name}</h1>
+                <span className="px-2.5 py-0.5 rounded-full bg-accent text-primary text-sm font-medium">
                   Level {grade?.level}
                 </span>
                 {grade && !grade.active && (
-                  <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-sm font-medium">
+                  <span className="px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground text-sm font-medium">
                     Inactive
                   </span>
                 )}
               </div>
             )}
             {grade?.description && (
-              <p className="text-gray-500 text-sm mt-0.5">{grade.description}</p>
+              <p className="text-muted-foreground text-sm mt-0.5">{grade.description}</p>
             )}
           </div>
         </div>
@@ -434,7 +436,7 @@ export default function GradeDetailPage() {
             className={`px-4 py-3 rounded-lg text-sm font-medium ${
               notification.type === 'success'
                 ? 'bg-green-50 text-green-800 border border-green-200'
-                : 'bg-red-50 text-red-800 border border-red-200'
+                : 'bg-destructive/10 text-red-800 border border-destructive/20'
             }`}
           >
             {notification.message}
@@ -442,7 +444,7 @@ export default function GradeDetailPage() {
         )}
 
         {/* Tabs */}
-        <div className="border-b border-gray-200">
+        <div className="border-b border-border">
           <nav className="-mb-px flex gap-6">
             {([
               { key: 'leave', label: 'Leave Entitlement', icon: Calendar },
@@ -456,8 +458,8 @@ export default function GradeDetailPage() {
                   onClick={() => setActiveTab(tab.key)}
                   className={`flex items-center gap-2 py-3 px-1 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === tab.key
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-input'
                   }`}
                 >
                   <Icon size={16} />
@@ -471,20 +473,20 @@ export default function GradeDetailPage() {
         {/* ============== LEAVE TAB ============== */}
         {activeTab === 'leave' && (
           <Card>
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Leave Entitlement</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Configure annual leave days per leave type for this grade</p>
+                <h2 className="text-base font-semibold text-foreground">Leave Entitlement</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Configure annual leave days per leave type for this grade</p>
               </div>
             </div>
             {leaveTypes.length === 0 ? (
-              <div className="px-6 py-12 text-center text-gray-500">
-                <Calendar size={40} className="text-gray-300 mx-auto mb-3" />
+              <div className="px-6 py-12 text-center text-muted-foreground">
+                <Calendar size={40} className="text-muted-foreground mx-auto mb-3" />
                 <p className="font-medium">No leave types configured</p>
                 <p className="text-sm mt-1">Add leave types in your company settings first.</p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-border">
                 {leaveTypes.map(lt => {
                   const config = getLeaveConfig(lt.id);
                   const isEditing = editingLeave === lt.id;
@@ -498,25 +500,25 @@ export default function GradeDetailPage() {
                               className="w-3 h-3 rounded-full flex-shrink-0"
                               style={{ backgroundColor: lt.color || '#6B7280' }}
                             />
-                            <span className="font-medium text-gray-800">{lt.name}</span>
+                            <span className="font-medium text-foreground">{lt.name}</span>
                           </div>
-                          <div className="flex items-center gap-6 text-sm text-gray-600">
+                          <div className="flex items-center gap-6 text-sm text-muted-foreground">
                             <span>
-                              <span className="font-semibold text-gray-900">{config?.days_per_year ?? 0}</span>{' '}
+                              <span className="font-semibold text-foreground">{config?.days_per_year ?? 0}</span>{' '}
                               days/year
                             </span>
                             <span>
                               Carry fwd:{' '}
-                              <span className="font-semibold text-gray-900">{config?.carry_forward_days ?? 0}</span> days
+                              <span className="font-semibold text-foreground">{config?.carry_forward_days ?? 0}</span> days
                             </span>
                             <span>
                               Expires:{' '}
-                              <span className="font-semibold text-gray-900">{config?.carry_forward_expiry_months ?? 3}</span> mo
+                              <span className="font-semibold text-foreground">{config?.carry_forward_expiry_months ?? 3}</span> mo
                             </span>
                           </div>
                           <button
                             onClick={() => startEditLeave(lt)}
-                            className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 transition-colors px-2 py-1.5 rounded hover:bg-blue-50"
+                            className="flex items-center gap-1.5 text-sm text-primary hover:text-primary transition-colors px-2 py-1.5 rounded hover:bg-accent"
                           >
                             <Edit2 size={14} />
                             Edit
@@ -529,37 +531,37 @@ export default function GradeDetailPage() {
                               className="w-3 h-3 rounded-full flex-shrink-0"
                               style={{ backgroundColor: lt.color || '#6B7280' }}
                             />
-                            <span className="font-medium text-gray-800">{lt.name}</span>
+                            <span className="font-medium text-foreground">{lt.name}</span>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Days per Year</label>
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">Days per Year</label>
                               <input
                                 type="number"
                                 min={0}
                                 value={leaveForm.days_per_year}
                                 onChange={e => setLeaveForm(f => ({ ...f, days_per_year: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Carry Forward Days</label>
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">Carry Forward Days</label>
                               <input
                                 type="number"
                                 min={0}
                                 value={leaveForm.carry_forward_days}
                                 onChange={e => setLeaveForm(f => ({ ...f, carry_forward_days: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-600 mb-1">Expiry (months)</label>
+                              <label className="block text-xs font-medium text-muted-foreground mb-1">Expiry (months)</label>
                               <input
                                 type="number"
                                 min={0}
                                 value={leaveForm.carry_forward_expiry_months}
                                 onChange={e => setLeaveForm(f => ({ ...f, carry_forward_expiry_months: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                               />
                             </div>
                           </div>
@@ -588,26 +590,26 @@ export default function GradeDetailPage() {
           <div className="space-y-4">
             {/* Current Band */}
             {currentSalary && (
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
-                <p className="text-blue-200 text-sm font-medium mb-1">Current Salary</p>
+              <div className="bg-gradient-to-r from-primary to-primary/90 rounded-xl p-6 text-white">
+                <p className="text-primary-foreground text-sm font-medium mb-1">Current Salary</p>
                 <p className="text-3xl font-bold">
                   {formatSalary(currentSalary.salary, currentSalary.currency)}
                 </p>
-                <p className="text-blue-200 text-sm mt-2">
+                <p className="text-primary-foreground text-sm mt-2">
                   Effective from {new Date(currentSalary.effective_from).toLocaleDateString()}
                   {currentSalary.effective_to && ` to ${new Date(currentSalary.effective_to).toLocaleDateString()}`}
                 </p>
                 {currentSalary.notes && (
-                  <p className="text-blue-100 text-sm mt-1 italic">{currentSalary.notes}</p>
+                  <p className="text-primary-foreground text-sm mt-1 italic">{currentSalary.notes}</p>
                 )}
               </div>
             )}
 
             <Card>
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-gray-900">Salary History</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">Fixed salary per grade with effective periods</p>
+                  <h2 className="text-base font-semibold text-foreground">Salary History</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">Fixed salary per grade with effective periods</p>
                 </div>
                 <Button
                   variant="primary"
@@ -626,36 +628,36 @@ export default function GradeDetailPage() {
 
               {/* Add Salary Band Form */}
               {showSalaryForm && (
-                <div className="px-6 py-4 bg-blue-50 border-b border-blue-100 overflow-visible">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">New Salary</h3>
+                <div className="px-6 py-4 bg-accent border-b border-primary/20 overflow-visible">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">New Salary</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 relative z-0">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Salary *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Salary *</label>
                       <input
                         type="number"
                         min={0}
                         value={salaryForm.salary}
                         onChange={e => setSalaryForm(f => ({ ...f, salary: e.target.value }))}
                         placeholder="8000"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Salary Component *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Salary Component *</label>
                       <input
                         type="text"
                         value={salaryForm.salary_component}
                         onChange={e => setSalaryForm(f => ({ ...f, salary_component: e.target.value }))}
                         placeholder="e.g., Basic Salary"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Currency</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Currency</label>
                       <select
                         value={salaryForm.currency}
                         onChange={e => setSalaryForm(f => ({ ...f, currency: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {['AED', 'USD', 'EUR', 'GBP', 'SAR', 'QAR', 'KWD', 'BHD', 'OMR'].map(c => (
                           <option key={c} value={c}>{c}</option>
@@ -663,7 +665,7 @@ export default function GradeDetailPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Effective From *</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Effective From *</label>
                       <DatePicker
                         value={salaryForm.effective_from}
                         onChange={(date) => setSalaryForm(f => ({ ...f, effective_from: date }))}
@@ -671,7 +673,7 @@ export default function GradeDetailPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Effective To</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Effective To</label>
                       <DatePicker
                         value={salaryForm.effective_to}
                         onChange={(date) => setSalaryForm(f => ({ ...f, effective_to: date }))}
@@ -679,18 +681,18 @@ export default function GradeDetailPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
                       <input
                         type="text"
                         value={salaryForm.notes}
                         onChange={e => setSalaryForm(f => ({ ...f, notes: e.target.value }))}
                         placeholder="Optional notes"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
                   </div>
                   {salaryError && (
-                    <p className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{salaryError}</p>
+                    <p className="mt-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">{salaryError}</p>
                   )}
                   <div className="flex gap-2 mt-3">
                     <Button size="sm" variant="primary" onClick={saveSalaryConfig} disabled={savingSalary}>
@@ -705,27 +707,27 @@ export default function GradeDetailPage() {
               )}
 
               {salaryConfigs.length === 0 && !showSalaryForm ? (
-                <div className="px-6 py-12 text-center text-gray-500">
-                  <DollarSign size={40} className="text-gray-300 mx-auto mb-3" />
+                <div className="px-6 py-12 text-center text-muted-foreground">
+                  <DollarSign size={40} className="text-muted-foreground mx-auto mb-3" />
                   <p className="font-medium">No salary bands configured</p>
                   <p className="text-sm mt-1">Set the first salary band for this grade.</p>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-border">
                   {salaryConfigs.map(config => {
                     const isActive = config.effective_from <= today && (!config.effective_to || config.effective_to >= today);
                     return (
                       <div key={config.id} className="px-6 py-4 flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-gray-800">
+                            <span className="font-semibold text-foreground">
                               {formatSalary(config.salary, config.currency)}
                             </span>
                             {isActive && (
                               <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Active</span>
                             )}
                           </div>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-muted-foreground">
                             {new Date(config.effective_from).toLocaleDateString()}
                             {config.effective_to && ` — ${new Date(config.effective_to).toLocaleDateString()}`}
                             {config.notes && ` · ${config.notes}`}
@@ -733,7 +735,7 @@ export default function GradeDetailPage() {
                         </div>
                         <button
                           onClick={() => deleteSalaryConfig(config.id)}
-                          className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -749,10 +751,10 @@ export default function GradeDetailPage() {
         {/* ============== BENEFITS TAB ============== */}
         {activeTab === 'benefits' && (
           <Card>
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Benefits Package</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Allowances and benefits for employees in this grade</p>
+                <h2 className="text-base font-semibold text-foreground">Benefits Package</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Allowances and benefits for employees in this grade</p>
               </div>
               <Button variant="primary" size="sm" onClick={openAddBenefit}>
                 <Plus size={16} />
@@ -762,34 +764,34 @@ export default function GradeDetailPage() {
 
             {/* Add / Edit Benefit Form */}
             {showBenefitForm && (
-              <div className="px-6 py-4 bg-blue-50 border-b border-blue-100">
-                <h3 className="text-sm font-semibold text-gray-800 mb-3">
+              <div className="px-6 py-4 bg-accent border-b border-primary/20">
+                <h3 className="text-sm font-semibold text-foreground mb-3">
                   {editingBenefit ? 'Edit Benefit' : 'New Benefit'}
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Benefit Type *</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Benefit Type *</label>
                     <select
                       value={benefitForm.benefit_type}
                       onChange={e => setBenefitForm(f => ({ ...f, benefit_type: e.target.value as BenefitType }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       {BENEFIT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Value Type</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Value Type</label>
                     <select
                       value={benefitForm.value_type}
                       onChange={e => setBenefitForm(f => ({ ...f, value_type: e.target.value as 'fixed' | 'percentage' }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                       <option value="fixed">Fixed Amount</option>
                       <option value="percentage">Percentage of Basic</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       {benefitForm.value_type === 'percentage' ? 'Percentage (%)' : 'Amount'}
                     </label>
                     <input
@@ -798,16 +800,16 @@ export default function GradeDetailPage() {
                       value={benefitForm.benefit_value}
                       onChange={e => setBenefitForm(f => ({ ...f, benefit_value: e.target.value }))}
                       placeholder={benefitForm.value_type === 'percentage' ? '10' : '5000'}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                   {benefitForm.value_type === 'fixed' && (
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Currency</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">Currency</label>
                       <select
                         value={benefitForm.currency}
                         onChange={e => setBenefitForm(f => ({ ...f, currency: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {['AED', 'USD', 'EUR', 'GBP', 'SAR', 'QAR', 'KWD', 'BHD', 'OMR'].map(c => (
                           <option key={c} value={c}>{c}</option>
@@ -816,18 +818,18 @@ export default function GradeDetailPage() {
                     </div>
                   )}
                   <div className={benefitForm.value_type === 'fixed' ? '' : 'md:col-span-2'}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Description</label>
                     <input
                       type="text"
                       value={benefitForm.description}
                       onChange={e => setBenefitForm(f => ({ ...f, description: e.target.value }))}
                       placeholder="Optional description"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-input rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
                 </div>
                 {benefitError && (
-                  <p className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{benefitError}</p>
+                  <p className="mt-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">{benefitError}</p>
                 )}
                 <div className="flex gap-2 mt-3">
                   <Button size="sm" variant="primary" onClick={saveBenefit} disabled={savingBenefit}>
@@ -842,26 +844,26 @@ export default function GradeDetailPage() {
             )}
 
             {benefits.length === 0 && !showBenefitForm ? (
-              <div className="px-6 py-12 text-center text-gray-500">
-                <Gift size={40} className="text-gray-300 mx-auto mb-3" />
+              <div className="px-6 py-12 text-center text-muted-foreground">
+                <Gift size={40} className="text-muted-foreground mx-auto mb-3" />
                 <p className="font-medium">No benefits configured</p>
                 <p className="text-sm mt-1">Add allowances and benefits for this grade.</p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-border">
                 {benefits.map(b => (
                   <div key={b.id} className="px-6 py-4 flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="font-medium text-gray-800">{b.benefit_type}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                        <span className="font-medium text-foreground">{b.benefit_type}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground font-medium">
                           {b.benefit_type}
                         </span>
                         {!b.active && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Inactive</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-sm text-gray-500">
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span>
                           {b.benefit_value !== null && b.benefit_value !== undefined
                             ? b.value_type === 'percentage'
@@ -878,7 +880,7 @@ export default function GradeDetailPage() {
                         className={`p-1.5 rounded transition-colors ${
                           b.active
                             ? 'text-green-600 hover:bg-green-50'
-                            : 'text-gray-400 hover:bg-gray-50'
+                            : 'text-muted-foreground hover:bg-muted'
                         }`}
                         title={b.active ? 'Deactivate' : 'Activate'}
                       >
@@ -886,13 +888,13 @@ export default function GradeDetailPage() {
                       </button>
                       <button
                         onClick={() => openEditBenefit(b)}
-                        className="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
                       >
                         <Edit2 size={15} />
                       </button>
                       <button
                         onClick={() => deleteBenefit(b.id)}
-                        className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                       >
                         <Trash2 size={15} />
                       </button>

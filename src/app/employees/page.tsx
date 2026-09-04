@@ -17,6 +17,7 @@ import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
+import { useTimeouts } from '@/hooks/useTimeouts';
 import PromotionRequestModal from '@/components/employees/PromotionRequestModal';
 
 // Schema for Add Employee (auto-creation API)
@@ -39,6 +40,7 @@ const EmployeesPage: React.FC = () => {
   const router = useRouter();
   const { selectedCompany } = useCompany();
   const { user } = useAuth();
+  const schedule = useTimeouts();
 
   // Role flags
   const isDeptManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
@@ -61,12 +63,14 @@ const EmployeesPage: React.FC = () => {
   // Fetch manager's own employee ID on mount
   React.useEffect(() => {
     if (!isDeptManager || !user?.id) return;
+    let cancelled = false;
     supabase
       .from('employees')
       .select('id')
       .eq('user_id', user.id)
       .maybeSingle()
-      .then(({ data }) => { if (data) setMyEmployeeId(data.id); });
+      .then(({ data }) => { if (!cancelled && data) setMyEmployeeId(data.id); });
+    return () => { cancelled = true; };
   }, [isDeptManager, user?.id]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('');
@@ -147,7 +151,7 @@ const EmployeesPage: React.FC = () => {
     if (newEmployeeData?.temporaryPassword) {
       navigator.clipboard.writeText(newEmployeeData.temporaryPassword).then(() => {
         setCopiedPassword(true);
-        setTimeout(() => setCopiedPassword(false), 2000);
+        schedule(() => setCopiedPassword(false), 2000);
       });
     }
   };
@@ -458,7 +462,7 @@ const EmployeesPage: React.FC = () => {
       }
 
       setMessage({ type: 'success', text: `Grade updated for ${gradeTarget.name}` });
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
       setShowGradeModal(false);
       setGradeTarget(null);
       fetchEmployees(currentPage);
@@ -507,7 +511,7 @@ const EmployeesPage: React.FC = () => {
       if (error) throw error;
 
       setMessage({ type: 'success', text: `Employee ${editForm.first_name} ${editForm.last_name} updated successfully` });
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
       setShowEditModal(false);
       setEditTarget(null);
       fetchEmployees(currentPage);
@@ -592,7 +596,7 @@ const EmployeesPage: React.FC = () => {
     if (tempPasswordData?.temporaryPassword) {
       navigator.clipboard.writeText(tempPasswordData.temporaryPassword).then(() => {
         setCopiedTempPassword(true);
-        setTimeout(() => setCopiedTempPassword(false), 2000);
+        schedule(() => setCopiedTempPassword(false), 2000);
       });
     }
   };
@@ -619,7 +623,7 @@ const EmployeesPage: React.FC = () => {
 
       setMessage({ type: 'success', text: 'Employee archived' });
       fetchEmployees(currentPage);
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       let displayError = 'Failed to archive employee';
       if (err instanceof Error) displayError = err.message;
@@ -660,13 +664,13 @@ const EmployeesPage: React.FC = () => {
         const grade = row.employee_grades as { name: string; level: number } | null;
         if (grade) {
           return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-accent text-purple-800">
               <Award size={11} />
               {grade.name}
             </span>
           );
         }
-        return <span className="text-xs text-gray-400 italic">Unassigned</span>;
+        return <span className="text-xs text-muted-foreground italic">Unassigned</span>;
       },
     },
     {
@@ -677,7 +681,7 @@ const EmployeesPage: React.FC = () => {
         if (grade?.salary != null) {
           return `${grade.currency || 'AED'} ${Number(grade.salary).toLocaleString()}`;
         }
-        return <span className="text-xs text-gray-400 italic">—</span>;
+        return <span className="text-xs text-muted-foreground italic">—</span>;
       },
     },
     {
@@ -690,7 +694,7 @@ const EmployeesPage: React.FC = () => {
               ? 'bg-green-100 text-green-800'
               : value === 'On Leave'
               ? 'bg-orange-100 text-orange-800'
-              : 'bg-gray-100 text-gray-800'
+              : 'bg-secondary text-secondary-foreground'
           }`}
         >
           {value}
@@ -703,27 +707,27 @@ const EmployeesPage: React.FC = () => {
       render: (_: any, row: any) => (
         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
           {!canManageEmployees ? (
-            <span className="text-xs text-gray-400 italic">View only</span>
+            <span className="text-xs text-muted-foreground italic">View only</span>
           ) : (
             <>
           <button
             onClick={() => openEditModal(row)}
-            className="p-1 hover:bg-gray-200 rounded transition"
+            className="p-1 hover:bg-muted rounded transition"
             title="Edit Employee"
           >
-            <Edit2 size={18} className="text-blue-600" />
+            <Edit2 size={18} className="text-primary" />
           </button>
           <button
             onClick={() => openGradeModal(row)}
-            className="p-1 hover:bg-gray-200 rounded transition"
+            className="p-1 hover:bg-muted rounded transition"
             title="Assign Grade"
           >
-            <Award size={18} className="text-purple-600" />
+            <Award size={18} className="text-accent-foreground" />
           </button>
           {isAdminOrHR && (
             <button
               onClick={() => openManagerModal(row)}
-              className="p-1 hover:bg-gray-200 rounded transition"
+              className="p-1 hover:bg-muted rounded transition"
               title="Assign Manager"
             >
               <UserCheck size={18} className="text-teal-600" />
@@ -732,7 +736,7 @@ const EmployeesPage: React.FC = () => {
           {isAdminOrHR && (
             <button
               onClick={() => openPromotionModal(row)}
-              className="p-1 hover:bg-gray-200 rounded transition"
+              className="p-1 hover:bg-muted rounded transition"
               title="Request Promotion / Demotion"
             >
               <TrendingUp size={18} className="text-green-600" />
@@ -741,7 +745,7 @@ const EmployeesPage: React.FC = () => {
           <button
             onClick={() => generateTemporaryPassword(row.id, `${row.first_name} ${row.last_name}`)}
             disabled={generatingPassword === row.id}
-            className="p-1 hover:bg-gray-200 rounded transition disabled:opacity-50"
+            className="p-1 hover:bg-muted rounded transition disabled:opacity-50"
             title="Generate New Password"
           >
             <Key size={18} className="text-orange-600" />
@@ -749,7 +753,7 @@ const EmployeesPage: React.FC = () => {
           <button
             onClick={() => archiveEmployee(row.id)}
             disabled={deleteLoading === row.id}
-            className="p-1 hover:bg-gray-200 rounded transition disabled:opacity-50"
+            className="p-1 hover:bg-muted rounded transition disabled:opacity-50"
             title="Archive (set Inactive, keep history)"
           >
             <Archive size={18} className="text-amber-600" />
@@ -781,7 +785,7 @@ const EmployeesPage: React.FC = () => {
           <div className={`p-4 rounded-lg border ${
             message.type === 'success'
               ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-destructive/10 border-destructive/20 text-red-800'
           }`}>
             <div className="flex justify-between items-start">
               <p className="font-medium">{message.text}</p>
@@ -795,8 +799,8 @@ const EmployeesPage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Employees</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="text-3xl font-bold text-foreground">Employees</h1>
+            <p className="text-muted-foreground mt-1">
               {selectedCompany ? `Manage employees at ${selectedCompany.name}` : 'Select a company to view employees'}
             </p>
           </div>
@@ -825,8 +829,8 @@ const EmployeesPage: React.FC = () => {
         </div>
 
         {!selectedCompany && (
-          <Card className="bg-blue-50 border border-blue-200">
-            <p className="text-blue-700 text-center py-4">Please select a company from the header to view and manage employees</p>
+          <Card className="bg-accent border border-primary/20">
+            <p className="text-primary text-center py-4">Please select a company from the header to view and manage employees</p>
           </Card>
         )}
 
@@ -835,7 +839,7 @@ const EmployeesPage: React.FC = () => {
         {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center py-8">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
           </div>
         )}
 
@@ -845,20 +849,20 @@ const EmployeesPage: React.FC = () => {
         <Card>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+              <Search className="absolute left-3 top-3 text-muted-foreground" size={20} />
               <input
                 type="text"
                 placeholder="Search by name or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
             <select
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">All Departments</option>
               <option value="Engineering">Engineering</option>
@@ -870,7 +874,7 @@ const EmployeesPage: React.FC = () => {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">All Status</option>
               <option value="Active">Active</option>
@@ -892,7 +896,7 @@ const EmployeesPage: React.FC = () => {
         </Card>
 
         {/* Results Summary */}
-        <div className="flex justify-between items-center text-sm text-gray-600">
+        <div className="flex justify-between items-center text-sm text-muted-foreground">
           <span>
             Showing <span className="font-semibold">{filteredEmployees.length}</span> of{' '}
             <span className="font-semibold">{totalCount}</span> employees (Page {currentPage} of {Math.ceil(totalCount / ITEMS_PER_PAGE)})
@@ -902,7 +906,7 @@ const EmployeesPage: React.FC = () => {
         {/* Table */}
         <Card noPadding>
           {filteredEmployees.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
               No employees found
             </div>
           ) : (
@@ -926,8 +930,8 @@ const EmployeesPage: React.FC = () => {
                 onClick={() => fetchEmployees(page)}
                 className={`px-3 py-1 rounded-lg transition ${
                   page === currentPage
-                    ? 'bg-blue-600 text-white font-semibold'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? 'bg-primary text-primary-foreground font-semibold'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                 }`}
                 disabled={loading}
               >
@@ -977,7 +981,7 @@ const EmployeesPage: React.FC = () => {
             <div className={`p-3 rounded-lg ${
               createMessage.type === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-destructive/10 border border-destructive/20 text-destructive'
             }`}>
               {createMessage.text}
             </div>
@@ -985,83 +989,83 @@ const EmployeesPage: React.FC = () => {
 
           {!newEmployeeData ? (
             <>
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-xs font-medium text-blue-600 uppercase">Company</p>
-                <p className="text-sm font-semibold text-gray-900 mt-1">{selectedCompany?.name}</p>
-                <p className="text-xs text-gray-600 mt-1">Employee will be created with automatic account provisioning</p>
+              <div className="p-3 bg-accent rounded-lg border border-primary/20">
+                <p className="text-xs font-medium text-primary uppercase">Company</p>
+                <p className="text-sm font-semibold text-foreground mt-1">{selectedCompany?.name}</p>
+                <p className="text-xs text-muted-foreground mt-1">Employee will be created with automatic account provisioning</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">First Name *</label>
                   <input
                     {...registerCreate('first_name')}
                     type="text"
                     placeholder="Enter first name"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   {errorsCreate.first_name && (
-                    <p className="mt-1 text-sm text-red-600">{errorsCreate.first_name.message}</p>
+                    <p className="mt-1 text-sm text-destructive">{errorsCreate.first_name.message}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Last Name *</label>
                   <input
                     {...registerCreate('last_name')}
                     type="text"
                     placeholder="Enter last name"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   {errorsCreate.last_name && (
-                    <p className="mt-1 text-sm text-red-600">{errorsCreate.last_name.message}</p>
+                    <p className="mt-1 text-sm text-destructive">{errorsCreate.last_name.message}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Email *</label>
                 <input
                   {...registerCreate('email')}
                   type="email"
                   placeholder="Enter email address"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
                 {errorsCreate.email && (
-                  <p className="mt-1 text-sm text-red-600">{errorsCreate.email.message}</p>
+                  <p className="mt-1 text-sm text-destructive">{errorsCreate.email.message}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Phone</label>
                 <input
                   {...registerCreate('phone')}
                   type="tel"
                   placeholder="Enter phone number (optional)"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
                 {errorsCreate.phone && (
-                  <p className="mt-1 text-sm text-red-600">{errorsCreate.phone.message}</p>
+                  <p className="mt-1 text-sm text-destructive">{errorsCreate.phone.message}</p>
                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Position</label>
                   <input
                     {...registerCreate('position')}
                     type="text"
                     placeholder="Enter position (optional)"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   {errorsCreate.position && (
-                    <p className="mt-1 text-sm text-red-600">{errorsCreate.position.message}</p>
+                    <p className="mt-1 text-sm text-destructive">{errorsCreate.position.message}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Department</label>
                   <select
                     {...registerCreate('department')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">Select Department (optional)</option>
                     <option value="Engineering">Engineering</option>
@@ -1071,22 +1075,22 @@ const EmployeesPage: React.FC = () => {
                     <option value="Marketing">Marketing</option>
                   </select>
                   {errorsCreate.department && (
-                    <p className="mt-1 text-sm text-red-600">{errorsCreate.department.message}</p>
+                    <p className="mt-1 text-sm text-destructive">{errorsCreate.department.message}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Grade</label>
                 {grades.length === 0 ? (
-                  <p className="text-xs text-gray-400 italic py-2">
+                  <p className="text-xs text-muted-foreground italic py-2">
                     No grades configured.{' '}
-                    <Link href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</Link>.
+                    <Link href="/admin/grades" target="_blank" className="text-primary underline">Create grades first</Link>.
                   </p>
                 ) : (
                   <select
                     {...registerCreate('grade_id')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">Select Grade (optional)</option>
                     {grades.map((g) => (
@@ -1100,14 +1104,14 @@ const EmployeesPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Date of Joining</label>
                 <DatePicker
                   value={joiningDateCreate ?? ''}
                   onChange={(date) => setValueCreate('date_of_joining', date)}
                   placeholder="Select joining date (optional)"
                 />
                 {errorsCreate.date_of_joining && (
-                  <p className="mt-1 text-sm text-red-600">{errorsCreate.date_of_joining.message}</p>
+                  <p className="mt-1 text-sm text-destructive">{errorsCreate.date_of_joining.message}</p>
                 )}
               </div>
             </>
@@ -1117,32 +1121,32 @@ const EmployeesPage: React.FC = () => {
                 <h3 className="text-sm font-semibold text-green-900 mb-3">Employee Created Successfully!</h3>
 
                 <div className="space-y-3">
-                  <div className="bg-white p-3 rounded-lg">
-                    <p className="text-xs text-gray-600 uppercase font-medium">Employee Name</p>
-                    <p className="text-lg font-semibold text-gray-900">{newEmployeeData.first_name} {newEmployeeData.last_name}</p>
+                  <div className="bg-card p-3 rounded-lg">
+                    <p className="text-xs text-muted-foreground uppercase font-medium">Employee Name</p>
+                    <p className="text-lg font-semibold text-foreground">{newEmployeeData.first_name} {newEmployeeData.last_name}</p>
                   </div>
 
-                  <div className="bg-white p-3 rounded-lg">
-                    <p className="text-xs text-gray-600 uppercase font-medium">Email Address</p>
-                    <p className="text-sm font-semibold text-gray-900 break-all">{newEmployeeData.email}</p>
+                  <div className="bg-card p-3 rounded-lg">
+                    <p className="text-xs text-muted-foreground uppercase font-medium">Email Address</p>
+                    <p className="text-sm font-semibold text-foreground break-all">{newEmployeeData.email}</p>
                   </div>
 
-                  <div className="bg-white p-3 rounded-lg border-2 border-yellow-200">
-                    <p className="text-xs text-gray-600 uppercase font-medium mb-2">Temporary Password</p>
+                  <div className="bg-card p-3 rounded-lg border-2 border-yellow-200">
+                    <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Temporary Password</p>
                     <div className="flex items-center gap-2">
-                      <code className="flex-1 px-3 py-2 bg-gray-100 rounded font-mono text-sm font-bold text-gray-900 break-all">
+                      <code className="flex-1 px-3 py-2 bg-muted rounded font-mono text-sm font-bold text-foreground break-all">
                         {newEmployeeData.temporaryPassword}
                       </code>
                       <button
                         type="button"
                         onClick={copyPasswordToClipboard}
-                        className="flex-shrink-0 p-2 hover:bg-gray-100 rounded transition"
+                        className="flex-shrink-0 p-2 hover:bg-muted rounded transition"
                         title="Copy password"
                       >
                         {copiedPassword ? (
                           <Check size={20} className="text-green-600" />
                         ) : (
-                          <Copy size={20} className="text-gray-600" />
+                          <Copy size={20} className="text-muted-foreground" />
                         )}
                       </button>
                     </div>
@@ -1150,8 +1154,8 @@ const EmployeesPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-xs text-blue-700">
+                <div className="mt-4 p-3 bg-accent rounded-lg border border-primary/20">
+                  <p className="text-xs text-primary">
                     ✓ Auth account created<br/>
                     ✓ Employee record created<br/>
                     ✓ Employee role assigned<br/>
@@ -1183,13 +1187,13 @@ const EmployeesPage: React.FC = () => {
       >
         {gradeTarget && (
           <div className="space-y-4">
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 uppercase font-medium">Employee</p>
-              <p className="text-sm font-semibold text-gray-900 mt-0.5">{gradeTarget.name}</p>
+            <div className="p-3 bg-muted rounded-lg border border-border">
+              <p className="text-xs text-muted-foreground uppercase font-medium">Employee</p>
+              <p className="text-sm font-semibold text-foreground mt-0.5">{gradeTarget.name}</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Grade
               </label>
               {grades.length === 0 ? (
@@ -1201,7 +1205,7 @@ const EmployeesPage: React.FC = () => {
                 <select
                   value={selectedGradeId}
                   onChange={(e) => setSelectedGradeId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="">— Remove grade assignment —</option>
                   {grades.map((g) => (
@@ -1216,11 +1220,11 @@ const EmployeesPage: React.FC = () => {
             {selectedGradeId && (() => {
               const g = grades.find(x => x.id === selectedGradeId);
               return g ? (
-                <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                  <Award size={16} className="text-purple-600 flex-shrink-0" />
+                <div className="flex items-center gap-2 p-3 bg-accent border border-sidebar-border rounded-lg">
+                  <Award size={16} className="text-accent-foreground flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-purple-900">{g.name}</p>
-                    <p className="text-xs text-purple-600">Level {g.level}</p>
+                    <p className="text-xs text-accent-foreground">Level {g.level}</p>
                   </div>
                 </div>
               ) : null;
@@ -1250,42 +1254,42 @@ const EmployeesPage: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+                <label className="block text-sm font-medium text-foreground mb-2">First Name *</label>
                 <input
                   type="text"
                   value={editForm.first_name}
                   onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Last Name *</label>
                 <input
                   type="text"
                   value={editForm.last_name}
                   onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Position</label>
                 <input
                   type="text"
                   value={editForm.position}
                   onChange={(e) => setEditForm((f) => ({ ...f, position: e.target.value }))}
                   placeholder="e.g. Software Engineer"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Department</label>
                 <select
                   value={editForm.department}
                   onChange={(e) => setEditForm((f) => ({ ...f, department: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Select Department</option>
                   <option value="Engineering">Engineering</option>
@@ -1299,11 +1303,11 @@ const EmployeesPage: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Employment Type</label>
                 <select
                   value={editForm.employment_type}
                   onChange={(e) => setEditForm((f) => ({ ...f, employment_type: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Select Employment Type</option>
                   <option value="Full-Time">Full-Time</option>
@@ -1313,11 +1317,11 @@ const EmployeesPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <label className="block text-sm font-medium text-foreground mb-2">Status</label>
                 <select
                   value={editForm.status}
                   onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Select Status</option>
                   <option value="Active">Active</option>
@@ -1329,7 +1333,7 @@ const EmployeesPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
+              <label className="block text-sm font-medium text-foreground mb-2">Date of Joining</label>
               <DatePicker
                 value={editForm.date_of_joining}
                 onChange={(date) => setEditForm((f) => ({ ...f, date_of_joining: date }))}
@@ -1338,17 +1342,17 @@ const EmployeesPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+              <label className="block text-sm font-medium text-foreground mb-2">Grade</label>
               {grades.length === 0 ? (
-                <p className="text-xs text-gray-400 italic py-2">
+                <p className="text-xs text-muted-foreground italic py-2">
                   No grades configured.{' '}
-                  <Link href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades first</Link>.
+                  <Link href="/admin/grades" target="_blank" className="text-primary underline">Create grades first</Link>.
                 </p>
               ) : (
                 <select
                   value={editForm.grade_id}
                   onChange={(e) => setEditForm((f) => ({ ...f, grade_id: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">— No grade —</option>
                   {grades.map((g) => (
@@ -1389,36 +1393,36 @@ const EmployeesPage: React.FC = () => {
       >
         {tempPasswordData && (
           <div className="space-y-4">
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="text-sm font-semibold text-blue-900 mb-3">New Temporary Password Created</h3>
+            <div className="p-4 bg-accent border border-primary/20 rounded-lg">
+              <h3 className="text-sm font-semibold text-accent-foreground mb-3">New Temporary Password Created</h3>
 
               <div className="space-y-3">
-                <div className="bg-white p-3 rounded-lg">
-                  <p className="text-xs text-gray-600 uppercase font-medium">Employee Name</p>
-                  <p className="text-lg font-semibold text-gray-900">{tempPasswordData.employee_name}</p>
+                <div className="bg-card p-3 rounded-lg">
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Employee Name</p>
+                  <p className="text-lg font-semibold text-foreground">{tempPasswordData.employee_name}</p>
                 </div>
 
-                <div className="bg-white p-3 rounded-lg">
-                  <p className="text-xs text-gray-600 uppercase font-medium">Email Address</p>
-                  <p className="text-sm font-semibold text-gray-900 break-all">{tempPasswordData.employee_email}</p>
+                <div className="bg-card p-3 rounded-lg">
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Email Address</p>
+                  <p className="text-sm font-semibold text-foreground break-all">{tempPasswordData.employee_email}</p>
                 </div>
 
-                <div className="bg-white p-3 rounded-lg border-2 border-orange-200">
-                  <p className="text-xs text-gray-600 uppercase font-medium mb-2">Temporary Password</p>
+                <div className="bg-card p-3 rounded-lg border-2 border-orange-200">
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Temporary Password</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-gray-100 rounded font-mono text-sm font-bold text-gray-900 break-all">
+                    <code className="flex-1 px-3 py-2 bg-muted rounded font-mono text-sm font-bold text-foreground break-all">
                       {tempPasswordData.temporaryPassword}
                     </code>
                     <button
                       type="button"
                       onClick={copyTempPasswordToClipboard}
-                      className="flex-shrink-0 p-2 hover:bg-gray-100 rounded transition"
+                      className="flex-shrink-0 p-2 hover:bg-muted rounded transition"
                       title="Copy password"
                     >
                       {copiedTempPassword ? (
                         <Check size={20} className="text-green-600" />
                       ) : (
-                        <Copy size={20} className="text-gray-600" />
+                        <Copy size={20} className="text-muted-foreground" />
                       )}
                     </button>
                   </div>
@@ -1464,15 +1468,15 @@ const EmployeesPage: React.FC = () => {
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Select a Manager to assign to this employee. The manager will be able to view this employee's data.
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Manager</label>
             <select
               value={selectedManagerId}
               onChange={e => setSelectedManagerId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">— No Manager (unassign) —</option>
               {availableManagers.map(m => (
@@ -1480,7 +1484,7 @@ const EmployeesPage: React.FC = () => {
               ))}
             </select>
             {availableManagers.length === 0 && (
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-muted-foreground">
                 No Managers found in this company. Assign the Manager role first via RBAC.
               </p>
             )}
