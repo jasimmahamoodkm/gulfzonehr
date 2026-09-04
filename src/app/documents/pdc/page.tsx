@@ -12,6 +12,7 @@ import { FileText, CreditCard, Plus, Edit2, Trash2, AlertTriangle } from 'lucide
 import { useCompany } from '@/context/CompanyContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 type ChequeType = 'payable' | 'receivable';
 type ChequeStatus = 'pending' | 'cleared' | 'bounced' | 'cancelled';
@@ -35,10 +36,10 @@ const STATUSES: ChequeStatus[] = ['pending', 'cleared', 'bounced', 'cancelled'];
 const statusBadge: Record<ChequeStatus, string> = {
   pending: 'bg-amber-100 text-amber-700',
   cleared: 'bg-green-100 text-green-700',
-  bounced: 'bg-red-100 text-red-700',
-  cancelled: 'bg-gray-100 text-gray-600',
+  bounced: 'bg-destructive/15 text-destructive',
+  cancelled: 'bg-muted text-muted-foreground',
 };
-const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white';
+const inputCls = 'w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card';
 const todayStr = () => new Date().toISOString().split('T')[0];
 
 const emptyForm = {
@@ -58,6 +59,7 @@ const emptyForm = {
 export default function PdcPage() {
   const { selectedCompany } = useCompany();
   const { user } = useAuth();
+  const schedule = useTimeouts();
   const canManage = user?.roles?.some(r =>
     ['Super Admin', 'Company Admin', 'HR Manager'].includes(r.role_name || '')) ?? false;
 
@@ -71,7 +73,7 @@ export default function PdcPage() {
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const companyId = selectedCompany?.id || '';
-  const flash = (type: 'success' | 'error', text: string) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 4000); };
+  const flash = (type: 'success' | 'error', text: string) => { setMsg({ type, text }); schedule(() => setMsg(null), 4000); };
 
   const load = useCallback(async () => {
     if (!companyId) { setCheques([]); return; }
@@ -165,19 +167,19 @@ export default function PdcPage() {
     <Layout>
       <div className="space-y-6">
         {/* Tab bar (under Documents) */}
-        <div className="flex gap-2 border-b border-gray-200">
-          <Link href="/documents" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800">
+        <div className="flex gap-2 border-b border-border">
+          <Link href="/documents" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
             <FileText size={16} /> Documents
           </Link>
-          <span className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">
+          <span className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary border-b-2 border-primary -mb-px">
             <CreditCard size={16} /> PDC Cheques
           </span>
         </div>
 
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">PDC Cheque Tracking</h1>
-            <p className="text-gray-500 text-sm">
+            <h1 className="text-2xl font-bold text-foreground">PDC Cheque Tracking</h1>
+            <p className="text-muted-foreground text-sm">
               {selectedCompany ? `Post-dated cheques for ${selectedCompany.name}` : 'Select a company to manage cheques'}
             </p>
           </div>
@@ -190,25 +192,25 @@ export default function PdcPage() {
         </div>
 
         {msg && (
-          <div className={`p-3 rounded-lg border text-sm ${msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>{msg.text}</div>
+          <div className={`p-3 rounded-lg border text-sm ${msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-destructive/10 border-destructive/20 text-red-800'}`}>{msg.text}</div>
         )}
 
         {!selectedCompany ? (
-          <Card className="p-8 text-center text-gray-500">Select a company to view PDC cheques.</Card>
+          <Card className="p-8 text-center text-muted-foreground">Select a company to view PDC cheques.</Card>
         ) : (
           <>
             {/* Summary */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card className="p-5">
-                <p className="text-sm text-gray-500">Payable (pending)</p>
-                <p className="text-2xl font-bold text-red-600">{fmt(sumBy('payable'))}</p>
+                <p className="text-sm text-muted-foreground">Payable (pending)</p>
+                <p className="text-2xl font-bold text-destructive">{fmt(sumBy('payable'))}</p>
               </Card>
               <Card className="p-5">
-                <p className="text-sm text-gray-500">Receivable (pending)</p>
+                <p className="text-sm text-muted-foreground">Receivable (pending)</p>
                 <p className="text-2xl font-bold text-green-600">{fmt(sumBy('receivable'))}</p>
               </Card>
               <Card className="p-5">
-                <p className="text-sm text-gray-500">Overdue (pending, past due)</p>
+                <p className="text-sm text-muted-foreground">Overdue (pending, past due)</p>
                 <p className="text-2xl font-bold text-amber-600 flex items-center gap-2">{overdueCount > 0 && <AlertTriangle size={20} />}{overdueCount}</p>
               </Card>
             </div>
@@ -224,14 +226,14 @@ export default function PdcPage() {
                 <option value="all">All statuses</option>
                 {STATUSES.map(s => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
               </select>
-              <span className="text-sm text-gray-500">{filtered.length} cheque(s)</span>
+              <span className="text-sm text-muted-foreground">{filtered.length} cheque(s)</span>
             </div>
 
             {/* Table */}
             <Card noPadding>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b text-gray-500">
+                  <thead className="bg-muted border-b text-muted-foreground">
                     <tr>
                       <th className="text-left px-4 py-2 font-medium">Type</th>
                       <th className="text-left px-4 py-2 font-medium">Cheque #</th>
@@ -245,21 +247,21 @@ export default function PdcPage() {
                   </thead>
                   <tbody className="divide-y">
                     {loading ? (
-                      <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
                     ) : filtered.length === 0 ? (
-                      <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No cheques.</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No cheques.</td></tr>
                     ) : filtered.map(c => (
-                      <tr key={c.id} className={isOverdue(c) ? 'bg-red-50' : ''}>
+                      <tr key={c.id} className={isOverdue(c) ? 'bg-destructive/10' : ''}>
                         <td className="px-4 py-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${c.cheque_type === 'payable' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded ${c.cheque_type === 'payable' ? 'bg-destructive/10 text-destructive' : 'bg-green-50 text-green-700'}`}>
                             {c.cheque_type === 'payable' ? 'Payable' : 'Receivable'}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-gray-900 font-medium">{c.cheque_number}</td>
-                        <td className="px-4 py-2 text-gray-700">{c.party_name || '—'}</td>
-                        <td className="px-4 py-2 text-gray-700">{c.bank_name || '—'}</td>
-                        <td className="px-4 py-2 text-right text-gray-900">{fmt(c.amount, c.currency)}</td>
-                        <td className={`px-4 py-2 ${isOverdue(c) ? 'text-red-600 font-medium' : 'text-gray-700'}`}>
+                        <td className="px-4 py-2 text-foreground font-medium">{c.cheque_number}</td>
+                        <td className="px-4 py-2 text-foreground">{c.party_name || '—'}</td>
+                        <td className="px-4 py-2 text-foreground">{c.bank_name || '—'}</td>
+                        <td className="px-4 py-2 text-right text-foreground">{fmt(c.amount, c.currency)}</td>
+                        <td className={`px-4 py-2 ${isOverdue(c) ? 'text-destructive font-medium' : 'text-foreground'}`}>
                           {new Date(c.cheque_date).toLocaleDateString()}{isOverdue(c) && ' ⚠'}
                         </td>
                         <td className="px-4 py-2">
@@ -275,8 +277,8 @@ export default function PdcPage() {
                         {canManage && (
                           <td className="px-4 py-2">
                             <div className="flex gap-1 justify-end">
-                              <button onClick={() => openEdit(c)} className="p-1 hover:bg-gray-200 rounded" title="Edit"><Edit2 size={16} className="text-blue-600" /></button>
-                              <button onClick={() => remove(c)} className="p-1 hover:bg-gray-200 rounded" title="Delete"><Trash2 size={16} className="text-red-600" /></button>
+                              <button onClick={() => openEdit(c)} className="p-1 hover:bg-muted rounded" title="Edit"><Edit2 size={16} className="text-primary" /></button>
+                              <button onClick={() => remove(c)} className="p-1 hover:bg-muted rounded" title="Delete"><Trash2 size={16} className="text-destructive" /></button>
                             </div>
                           </td>
                         )}
@@ -339,7 +341,7 @@ export default function PdcPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-foreground mb-1">{label}</label>
       {children}
     </div>
   );

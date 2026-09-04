@@ -5,7 +5,7 @@
  * Provides leave approval workflow functionality
  */
 
-import { useCallback, useContext, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AuthContext } from '@/context/AuthContext';
 import { logAuditEvent } from '@/lib/audit';
 import type { LeaveApprovalRequest, LeaveRejectionRequest } from '@/types/leaves';
@@ -16,6 +16,14 @@ export function useLeaveApprovals() {
   const user = context?.user;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   /**
    * Approve a leave request
@@ -82,7 +90,7 @@ export function useLeaveApprovals() {
 
         return { success: false };
       } finally {
-        setLoading(false);
+        if (aliveRef.current) setLoading(false);
       }
     },
     [user?.id, user?.company_id]
@@ -153,7 +161,7 @@ export function useLeaveApprovals() {
 
         return { success: false };
       } finally {
-        setLoading(false);
+        if (aliveRef.current) setLoading(false);
       }
     },
     [user?.id, user?.company_id]
@@ -226,7 +234,7 @@ export function useLeaveApprovals() {
 
         return { success: false };
       } finally {
-        setLoading(false);
+        if (aliveRef.current) setLoading(false);
       }
     },
     [user?.id, user?.company_id]

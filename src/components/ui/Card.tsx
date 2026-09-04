@@ -11,11 +11,11 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
     return (
       <div
         ref={ref}
-        className={`bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden ${className || ''}`}
+        className={`bg-card text-card-foreground rounded-lg shadow-md border border-border overflow-hidden ${className || ''}`}
         {...props}
       >
         {header && (
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <div className="px-6 py-4 border-b border-border bg-muted">
             {header}
           </div>
         )}
@@ -23,7 +23,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
           {children}
         </div>
         {footer && (
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="px-6 py-4 border-t border-border bg-muted">
             {footer}
           </div>
         )}

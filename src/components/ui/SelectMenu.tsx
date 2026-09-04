@@ -57,12 +57,19 @@ export default function SelectMenu({
         setOpen(false);
       }
     };
-    const onScroll = () => setOpen(false);
+    const onDismiss = () => setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
-    window.addEventListener('resize', onScroll);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onDismiss);
+    window.addEventListener('scroll', onDismiss, true);
     return () => {
       document.removeEventListener('mousedown', onDoc);
-      window.removeEventListener('resize', onScroll);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onDismiss);
+      window.removeEventListener('scroll', onDismiss, true);
     };
   }, [open]);
 
@@ -73,34 +80,34 @@ export default function SelectMenu({
         type="button"
         disabled={disabled}
         onClick={toggle}
-        className={`w-full px-4 py-2.5 text-base border border-gray-300 rounded-lg bg-white flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed ${className}`}
+        className={`w-full px-4 py-2.5 text-base border border-input rounded-lg bg-card flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:bg-secondary disabled:cursor-not-allowed ${className}`}
       >
-        <span className={`truncate ${selected ? 'text-gray-900' : 'text-gray-500'}`}>
+        <span className={`truncate ${selected ? 'text-foreground' : 'text-muted-foreground'}`}>
           {selected ? selected.label : placeholder}
         </span>
-        <ChevronDown size={18} className="text-gray-400 flex-shrink-0 ml-2" />
+        <ChevronDown size={18} className="text-muted-foreground flex-shrink-0 ml-2" />
       </button>
 
       {open && !disabled && (
         <div
           ref={listRef}
-          className="fixed bg-white border border-gray-300 rounded-lg shadow-2xl py-1 overflow-y-auto"
+          className="fixed bg-card border border-input rounded-lg shadow-2xl py-1 overflow-y-auto"
           style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: maxH, zIndex: 9999 }}
         >
           {options.length === 0 && (
-            <div className="px-4 py-2.5 text-sm text-gray-400">No options</div>
+            <div className="px-4 py-2.5 text-sm text-muted-foreground">No options</div>
           )}
           {options.map((o) => (
             <button
               key={o.value}
               type="button"
               onClick={() => { onChange(o.value); setOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 text-base flex items-center justify-between transition-colors hover:bg-blue-50 ${
-                o.value === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+              className={`w-full text-left px-4 py-2.5 text-base flex items-center justify-between transition-colors hover:bg-accent ${
+                o.value === value ? 'bg-accent text-primary font-medium' : 'text-foreground'
               }`}
             >
               <span className="truncate">{o.label}</span>
-              {o.value === value && <Check size={16} className="text-blue-600 flex-shrink-0 ml-2" />}
+              {o.value === value && <Check size={16} className="text-primary flex-shrink-0 ml-2" />}
             </button>
           ))}
         </div>

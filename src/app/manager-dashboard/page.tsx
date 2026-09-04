@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -20,10 +20,13 @@ export default function ManagerDashboardPage() {
   const [pendingLeaveRequests, setPendingLeaveRequests] = useState<any[]>([]);
   const [teamAttendanceToday, setTeamAttendanceToday] = useState<any[]>([]);
   const [teamPerformance, setTeamPerformance] = useState<any[]>([]);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     if (!user) return;
+    cancelledRef.current = false;
     loadManagerData();
+    return () => { cancelledRef.current = true; };
   }, [user]);
 
   const loadManagerData = async () => {
@@ -40,7 +43,7 @@ export default function ManagerDashboardPage() {
       const myEmployeeId = myEmpData?.id;
 
       if (!myEmployeeId) {
-        setLoading(false);
+        if (!cancelledRef.current) setLoading(false);
         return;
       }
 
@@ -87,7 +90,7 @@ export default function ManagerDashboardPage() {
           .gte('end_date', today);
 
         stats.onLeave = leaveData?.length || 0;
-        setTeamStats(stats);
+        if (!cancelledRef.current) setTeamStats(stats);
       }
 
       // Get pending leave requests
@@ -98,7 +101,7 @@ export default function ManagerDashboardPage() {
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      if (!leavesError) {
+      if (!leavesError && !cancelledRef.current) {
         setPendingLeaveRequests(pendingLeaves || []);
       }
 
@@ -139,12 +142,14 @@ export default function ManagerDashboardPage() {
           };
         });
 
-        setTeamPerformance(performance.sort((a, b) => b.attendanceRate - a.attendanceRate));
+        if (!cancelledRef.current) {
+          setTeamPerformance(performance.sort((a, b) => b.attendanceRate - a.attendanceRate));
+        }
       }
     } catch (err) {
       console.error('Error loading manager dashboard:', err);
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   };
 
@@ -180,7 +185,7 @@ export default function ManagerDashboardPage() {
     return (
       <Layout>
         <div className="flex items-center justify-center h-96">
-          <div className="text-gray-500">Loading your manager dashboard...</div>
+          <div className="text-muted-foreground">Loading your manager dashboard...</div>
         </div>
       </Layout>
     );
@@ -191,8 +196,8 @@ export default function ManagerDashboardPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Manager Dashboard</h1>
-          <p className="text-gray-600 mt-2">Team overview and management</p>
+          <h1 className="text-3xl font-bold text-foreground">Manager Dashboard</h1>
+          <p className="text-muted-foreground mt-2">Team overview and management</p>
         </div>
 
         {/* Team Stats */}
@@ -200,17 +205,17 @@ export default function ManagerDashboardPage() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">Team Size</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{teamStats.totalMembers}</p>
+                <p className="text-muted-foreground text-sm">Team Size</p>
+                <p className="text-2xl font-bold text-foreground mt-2">{teamStats.totalMembers}</p>
               </div>
-              <Users className="text-blue-500" size={32} />
+              <Users className="text-primary" size={32} />
             </div>
           </Card>
 
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">Present Today</p>
+                <p className="text-muted-foreground text-sm">Present Today</p>
                 <p className="text-2xl font-bold text-green-600 mt-2">{teamStats.presentToday}</p>
               </div>
               <CheckCircle className="text-green-500" size={32} />
@@ -220,7 +225,7 @@ export default function ManagerDashboardPage() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">Late Today</p>
+                <p className="text-muted-foreground text-sm">Late Today</p>
                 <p className="text-2xl font-bold text-yellow-600 mt-2">{teamStats.lateToday}</p>
               </div>
               <Clock className="text-yellow-500" size={32} />
@@ -230,18 +235,18 @@ export default function ManagerDashboardPage() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">Absent Today</p>
-                <p className="text-2xl font-bold text-red-600 mt-2">{teamStats.absentToday}</p>
+                <p className="text-muted-foreground text-sm">Absent Today</p>
+                <p className="text-2xl font-bold text-destructive mt-2">{teamStats.absentToday}</p>
               </div>
-              <AlertCircle className="text-red-500" size={32} />
+              <AlertCircle className="text-destructive" size={32} />
             </div>
           </Card>
 
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">On Leave</p>
-                <p className="text-2xl font-bold text-purple-600 mt-2">{teamStats.onLeave}</p>
+                <p className="text-muted-foreground text-sm">On Leave</p>
+                <p className="text-2xl font-bold text-accent-foreground mt-2">{teamStats.onLeave}</p>
               </div>
               <Calendar className="text-purple-500" size={32} />
             </div>
@@ -254,31 +259,31 @@ export default function ManagerDashboardPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Pending Leave Requests */}
             <Card className="p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Pending Leave Requests</h2>
+              <h2 className="text-xl font-bold text-foreground mb-4">Pending Leave Requests</h2>
               {pendingLeaveRequests.length > 0 ? (
                 <div className="space-y-4">
                   {pendingLeaveRequests.map((leave) => (
                     <div
                       key={leave.id}
-                      className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 transition-colors"
+                      className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-semibold text-foreground">
                             {leave.employees?.first_name} {leave.employees?.last_name}
                           </p>
-                          <p className="text-sm text-gray-600">{leave.leave_type}</p>
+                          <p className="text-sm text-muted-foreground">{leave.leave_type}</p>
                         </div>
                         <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
                           Pending
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 mb-3">
+                      <p className="text-sm text-muted-foreground mb-3">
                         {new Date(leave.start_date).toLocaleDateString()} -{' '}
                         {new Date(leave.end_date).toLocaleDateString()} ({leave.days} days)
                       </p>
                       {leave.reason && (
-                        <p className="text-sm text-gray-700 mb-3 bg-gray-50 p-2 rounded">
+                        <p className="text-sm text-foreground mb-3 bg-muted p-2 rounded">
                           <span className="font-medium">Reason:</span> {leave.reason}
                         </p>
                       )}
@@ -291,7 +296,7 @@ export default function ManagerDashboardPage() {
                         </button>
                         <button
                           onClick={() => handleRejectLeave(leave.id)}
-                          className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
+                          className="px-4 py-2 bg-destructive/15 text-destructive rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
                         >
                           ✕ Reject
                         </button>
@@ -301,27 +306,27 @@ export default function ManagerDashboardPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <CheckCircle className="mx-auto text-gray-400 mb-3" size={40} />
-                  <p className="text-gray-600">No pending leave requests</p>
+                  <CheckCircle className="mx-auto text-muted-foreground mb-3" size={40} />
+                  <p className="text-muted-foreground">No pending leave requests</p>
                 </div>
               )}
             </Card>
 
             {/* Team Attendance Today */}
             <Card className="p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Team Attendance Today</h2>
+              <h2 className="text-xl font-bold text-foreground mb-4">Team Attendance Today</h2>
               {teamAttendanceToday.length > 0 ? (
                 <div className="space-y-2">
                   {teamAttendanceToday.map((record) => (
                     <div
                       key={record.id}
-                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                      className="flex items-center justify-between p-3 border border-border rounded-lg"
                     >
                       <div>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-foreground">
                           {record.employees?.first_name} {record.employees?.last_name}
                         </p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           {record.check_in ? `${record.check_in} - ${record.check_out || 'Not checked out'}` : 'No check-in'}
                         </p>
                       </div>
@@ -331,7 +336,7 @@ export default function ManagerDashboardPage() {
                             ? 'bg-green-100 text-green-800'
                             : record.status === 'late'
                             ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
+                            : 'bg-destructive/15 text-red-800'
                         }`}
                       >
                         {record.status}
@@ -341,8 +346,8 @@ export default function ManagerDashboardPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <AlertCircle className="mx-auto text-gray-400 mb-3" size={40} />
-                  <p className="text-gray-600">No attendance records for today</p>
+                  <AlertCircle className="mx-auto text-muted-foreground mb-3" size={40} />
+                  <p className="text-muted-foreground">No attendance records for today</p>
                 </div>
               )}
             </Card>
@@ -352,7 +357,7 @@ export default function ManagerDashboardPage() {
           <div>
             {/* Team Performance */}
             <Card className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <TrendingUp size={20} />
                 Team Performance (30 days)
               </h3>
@@ -361,22 +366,22 @@ export default function ManagerDashboardPage() {
                   {teamPerformance.map((member) => (
                     <div key={member.id} className="space-y-1">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="font-medium text-sm text-gray-900">{member.name}</p>
-                        <span className="text-sm font-bold text-gray-900">{member.attendanceRate}%</span>
+                        <p className="font-medium text-sm text-foreground">{member.name}</p>
+                        <span className="text-sm font-bold text-foreground">{member.attendanceRate}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className={`h-2 rounded-full ${
                             member.attendanceRate >= 90
                               ? 'bg-green-600'
                               : member.attendanceRate >= 70
                               ? 'bg-yellow-600'
-                              : 'bg-red-600'
+                              : 'bg-destructive'
                           }`}
                           style={{ width: `${member.attendanceRate}%` }}
                         ></div>
                       </div>
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         {member.daysPresent} / {member.daysTotal} days
                       </p>
                     </div>
@@ -384,8 +389,8 @@ export default function ManagerDashboardPage() {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <AlertCircle className="mx-auto text-gray-400 mb-3" size={40} />
-                  <p className="text-gray-600 text-sm">No performance data</p>
+                  <AlertCircle className="mx-auto text-muted-foreground mb-3" size={40} />
+                  <p className="text-muted-foreground text-sm">No performance data</p>
                 </div>
               )}
             </Card>

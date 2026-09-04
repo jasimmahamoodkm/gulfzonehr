@@ -16,11 +16,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const variantStyles = {
-      primary: 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800',
-      secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 active:bg-gray-400',
-      danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
-      success: 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800',
-      outline: 'border-2 border-blue-600 text-blue-600 hover:bg-blue-50 active:bg-blue-100',
+      primary: 'bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80',
+      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70',
+      danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/80',
+      success: 'bg-chart-3 text-primary-foreground hover:bg-chart-3/90 active:bg-chart-3/80',
+      outline: 'border-2 border-primary text-primary hover:bg-accent active:bg-accent/80',
     };
 
     return (

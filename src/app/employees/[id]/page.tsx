@@ -14,6 +14,7 @@ import { getEffectiveSalary, getMergedBenefits } from '@/lib/compensation';
 import { apiUrl } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import PromotionRequestModal from '@/components/employees/PromotionRequestModal';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 interface ChangeRow {
   id: string;
@@ -137,7 +138,7 @@ function JourneyChart({ series, changePoints, currency = 'AED' }: { series: { mo
   const W = 720, H = 260, PADL = 56, PADR = 20, PADT = 20, PADB = 36;
   const pts = series.filter(s => s.salary != null) as { month: string; salary: number }[];
   if (pts.length === 0) {
-    return <p className="text-sm text-gray-500 py-8 text-center">No salary data to plot yet.</p>;
+    return <p className="text-sm text-muted-foreground py-8 text-center">No salary data to plot yet.</p>;
   }
   const maxSal = Math.max(...pts.map(p => p.salary));
   const minSal = Math.min(...pts.map(p => p.salary));
@@ -195,26 +196,26 @@ function JourneyChart({ series, changePoints, currency = 'AED' }: { series: { mo
       {/* grid + y labels */}
       {gridY.map((g, i) => (
         <g key={i}>
-          <line x1={PADL} y1={y(g)} x2={W - PADR} y2={y(g)} stroke="#E5E7EB" strokeWidth="1" />
-          <text x={PADL - 8} y={y(g) + 4} textAnchor="end" fontSize="10" fill="#6B7280">
+          <line x1={PADL} y1={y(g)} x2={W - PADR} y2={y(g)} stroke="var(--border)" strokeWidth="1" />
+          <text x={PADL - 8} y={y(g) + 4} textAnchor="end" fontSize="10" fill="var(--muted-foreground)">
             {Math.round(g).toLocaleString()}
           </text>
         </g>
       ))}
       {/* x labels */}
       {series.map((s, i) => (i % tickEvery === 0 ? (
-        <text key={s.month} x={x(i)} y={H - PADB + 18} textAnchor="middle" fontSize="9" fill="#6B7280">
+        <text key={s.month} x={x(i)} y={H - PADB + 18} textAnchor="middle" fontSize="9" fill="var(--muted-foreground)">
           {monthLabel(s.month)}
         </text>
       ) : null))}
       {/* salary line */}
-      <path d={d} fill="none" stroke="#2563EB" strokeWidth="2.5" />
+      <path d={d} fill="none" stroke="var(--primary)" strokeWidth="2.5" />
       {/* endpoint (drawn before change markers so markers sit on top) */}
       {(() => {
         const last = [...series].reverse().find(s => s.salary != null);
         if (!last) return null;
         const i = series.findIndex(s => s.month === last.month);
-        return <circle cx={x(i)} cy={y(last.salary!)} r="3.5" fill="#2563EB" />;
+        return <circle cx={x(i)} cy={y(last.salary!)} r="3.5" fill="var(--primary)" />;
       })()}
       {/* grade tenure markers — grade name + total package, with hover detail */}
       {Array.from(byMonth.entries()).map(([month, cp]) => {
@@ -249,6 +250,7 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const schedule = useTimeouts();
 
   const isAdminOrHR = user?.roles?.some(r =>
     ['Super Admin', 'Company Admin', 'HR Manager'].includes(r.role_name || '')) ?? false;
@@ -423,7 +425,7 @@ export default function EmployeeDetailPage() {
 
   const flash = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
-    setTimeout(() => setMsg(null), 4000);
+    schedule(() => setMsg(null), 4000);
   };
   const authToken = async () => (await supabase.auth.getSession()).data.session?.access_token;
 
@@ -538,11 +540,11 @@ export default function EmployeeDetailPage() {
 
   if (loading) {
     return <Layout><div className="flex items-center justify-center py-20">
-      <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
     </div></Layout>;
   }
   if (!emp) {
-    return <Layout><Card className="p-8 text-center text-gray-500">Employee not found.</Card></Layout>;
+    return <Layout><Card className="p-8 text-center text-muted-foreground">Employee not found.</Card></Layout>;
   }
 
   return (
@@ -551,7 +553,7 @@ export default function EmployeeDetailPage() {
         {/* Header + actions */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <button onClick={() => router.push('/employees')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm">
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm">
             <ArrowLeft size={18} /> Back to Employees
           </button>
           {isAdminOrHR && (
@@ -586,7 +588,7 @@ export default function EmployeeDetailPage() {
 
         {msg && (
           <div className={`p-3 rounded-lg border text-sm flex justify-between items-start ${
-            msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
+            msg.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-destructive/10 border-destructive/20 text-red-800'
           }`}>
             <span className="font-medium">{msg.text}</span>
             <button onClick={() => setMsg(null)} className="text-lg leading-none opacity-70 hover:opacity-100">×</button>
@@ -601,14 +603,14 @@ export default function EmployeeDetailPage() {
             </div>
           )}
           <div className="flex items-start gap-4">
-            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xl font-bold">
+            <div className="w-16 h-16 rounded-full bg-accent flex items-center justify-center text-primary text-xl font-bold">
               {(emp.first_name?.[0] || '') + (emp.last_name?.[0] || '')}
             </div>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900">{emp.first_name} {emp.last_name}</h1>
-              <p className="text-gray-500">{emp.position || emp.department || '—'}</p>
+              <h1 className="text-2xl font-bold text-foreground">{emp.first_name} {emp.last_name}</h1>
+              <p className="text-muted-foreground">{emp.position || emp.department || '—'}</p>
               <span className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                emp.status === 'Active' || emp.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                emp.status === 'Active' || emp.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground'
               }`}>{emp.status || 'Active'}</span>
             </div>
           </div>
@@ -629,24 +631,24 @@ export default function EmployeeDetailPage() {
         {/* Journey widget */}
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-1">
-            <TrendingUp size={18} className="text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Employee Journey</h2>
+            <TrendingUp size={18} className="text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Employee Journey</h2>
           </div>
-          <p className="text-sm text-gray-500 mb-4">Total monthly package (basic + benefits) from joining date — each marker shows the grade and total at that promotion.</p>
+          <p className="text-sm text-muted-foreground mb-4">Total monthly package (basic + benefits) from joining date — each marker shows the grade and total at that promotion.</p>
           <JourneyChart series={series} changePoints={journeyPoints} currency={currency} />
         </Card>
 
         {/* Change history table */}
         <Card header={<h2 className="text-lg font-semibold">Change History</h2>} noPadding>
           {history.length === 0 ? (
-            <div className="p-8 text-center text-gray-500 text-sm">
+            <div className="p-8 text-center text-muted-foreground text-sm">
               No recorded changes yet. Grade and salary changes will appear here.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[36rem]">
-                <thead className="bg-gray-50 border-b">
-                  <tr className="text-gray-500">
+                <thead className="bg-muted border-b">
+                  <tr className="text-muted-foreground">
                     <th className="text-left px-6 py-2 font-medium">When</th>
                     <th className="text-left px-6 py-2 font-medium">Type</th>
                     <th className="text-right px-6 py-2 font-medium">From</th>
@@ -659,17 +661,17 @@ export default function EmployeeDetailPage() {
                     const ft = fromTo(h);
                     return (
                     <tr key={h.id}>
-                      <td className="px-6 py-2 text-gray-700">{new Date(h.changed_at).toLocaleDateString()}</td>
+                      <td className="px-6 py-2 text-foreground">{new Date(h.changed_at).toLocaleDateString()}</td>
                       <td className="px-6 py-2"><span className="capitalize">{h.change_type}</span></td>
                       {h.change_type === 'benefits' ? (
-                        <td className="px-6 py-2 text-gray-700" colSpan={2}>{h.note || 'Benefits updated'}</td>
+                        <td className="px-6 py-2 text-foreground" colSpan={2}>{h.note || 'Benefits updated'}</td>
                       ) : (
                         <>
-                          <td className="px-6 py-2 text-right text-gray-600">{ft.from}</td>
-                          <td className="px-6 py-2 text-right font-medium text-gray-900">{ft.to}</td>
+                          <td className="px-6 py-2 text-right text-muted-foreground">{ft.from}</td>
+                          <td className="px-6 py-2 text-right font-medium text-foreground">{ft.to}</td>
                         </>
                       )}
-                      <td className="px-6 py-2 text-gray-600">{h.effective_month ? monthLabel(h.effective_month) : '—'}</td>
+                      <td className="px-6 py-2 text-muted-foreground">{h.effective_month ? monthLabel(h.effective_month) : '—'}</td>
                     </tr>
                     );
                   })}
@@ -724,14 +726,14 @@ export default function EmployeeDetailPage() {
       <Modal isOpen={showGrade} onClose={() => setShowGrade(false)} title={`Assign Grade — ${emp.first_name} ${emp.last_name}`}>
         <div className="space-y-4">
           {grades.length === 0 ? (
-            <p className="text-sm text-gray-500">No grades configured. <Link href="/admin/grades" target="_blank" className="text-blue-600 underline">Create grades</Link> first.</p>
+            <p className="text-sm text-muted-foreground">No grades configured. <Link href="/admin/grades" target="_blank" className="text-primary underline">Create grades</Link> first.</p>
           ) : (
             <select className={inputCls} value={gradeChoice} onChange={e => setGradeChoice(e.target.value)}>
               <option value="">No grade</option>
               {grades.map(g => <option key={g.id} value={g.id}>{g.name} (L{g.level}){g.salary != null ? ` — AED ${g.salary.toLocaleString()}` : ''}</option>)}
             </select>
           )}
-          <p className="text-xs text-gray-400">Direct assignment is recorded in the change history. For a salary/benefit change, use “Promotion”.</p>
+          <p className="text-xs text-muted-foreground">Direct assignment is recorded in the change history. For a salary/benefit change, use “Promotion”.</p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowGrade(false)} disabled={busy === 'grade'}>Cancel</Button>
             <Button onClick={saveGrade} disabled={busy === 'grade'}>{busy === 'grade' ? 'Saving…' : 'Save'}</Button>
@@ -743,7 +745,7 @@ export default function EmployeeDetailPage() {
       <Modal isOpen={showManager} onClose={() => setShowManager(false)} title={`Assign Manager — ${emp.first_name} ${emp.last_name}`}>
         <div className="space-y-4">
           {managers.length === 0 ? (
-            <p className="text-sm text-gray-500">No employees hold the Manager role in this company yet.</p>
+            <p className="text-sm text-muted-foreground">No employees hold the Manager role in this company yet.</p>
           ) : (
             <select className={inputCls} value={managerChoice} onChange={e => setManagerChoice(e.target.value)}>
               <option value="">No manager</option>
@@ -772,10 +774,10 @@ export default function EmployeeDetailPage() {
       <Modal isOpen={!!tempPw} onClose={() => { setTempPw(null); setCopiedPw(false); }} title="Temporary Password">
         {tempPw && (
           <div className="space-y-3 text-sm">
-            <p className="text-gray-600">New temporary password for <span className="font-medium text-gray-900">{tempPw.name}</span> ({tempPw.email}).</p>
+            <p className="text-muted-foreground">New temporary password for <span className="font-medium text-foreground">{tempPw.name}</span> ({tempPw.email}).</p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 px-3 py-2 bg-gray-100 rounded-lg font-mono text-gray-900">{tempPw.password}</code>
-              <Button variant="secondary" onClick={() => { navigator.clipboard.writeText(tempPw.password); setCopiedPw(true); setTimeout(() => setCopiedPw(false), 2000); }}>
+              <code className="flex-1 px-3 py-2 bg-muted rounded-lg font-mono text-foreground">{tempPw.password}</code>
+              <Button variant="secondary" onClick={() => { navigator.clipboard.writeText(tempPw.password); setCopiedPw(true); schedule(() => setCopiedPw(false), 2000); }}>
                 {copiedPw ? <Check size={15} /> : <Copy size={15} />}
               </Button>
             </div>
@@ -790,12 +792,12 @@ export default function EmployeeDetailPage() {
   );
 }
 
-const inputCls = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white';
+const inputCls = 'w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-foreground mb-1">{label}</label>
       {children}
     </div>
   );
@@ -804,8 +806,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Info({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-gray-400 text-xs uppercase tracking-wide">{icon}{label}</div>
-      <p className="text-gray-900 mt-0.5">{value}</p>
+      <div className="flex items-center gap-1.5 text-muted-foreground text-xs uppercase tracking-wide">{icon}{label}</div>
+      <p className="text-foreground mt-0.5">{value}</p>
     </div>
   );
 }

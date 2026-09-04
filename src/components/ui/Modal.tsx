@@ -1,4 +1,6 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -22,17 +24,55 @@ const sizeClasses = {
 };
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, size = 'md' }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseRef.current();
+    };
+    document.addEventListener('keydown', onKey);
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      <div className={`relative bg-white rounded-lg shadow-xl ${sizeClasses[size]} w-full mx-4 flex flex-col max-h-[90vh]`}>
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" role="presentation">
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        tabIndex={-1}
+        className={`relative bg-card text-card-foreground rounded-lg shadow-xl ${sizeClasses[size]} w-full mx-4 flex flex-col max-h-[90vh] outline-none`}
+      >
+        <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
+          <h2 id="modal-title" className="text-lg font-semibold text-foreground">{title}</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 transition-colors"
+            aria-label="Close"
+            className="text-muted-foreground hover:text-foreground transition-colors"
           >
             <X size={24} />
           </button>
@@ -41,7 +81,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer,
           {children}
         </div>
         {footer && (
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3 flex-shrink-0">
+          <div className="px-6 py-4 border-t border-border bg-muted flex justify-end gap-3 flex-shrink-0">
             {footer}
           </div>
         )}

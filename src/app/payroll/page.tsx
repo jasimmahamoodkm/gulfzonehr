@@ -65,6 +65,7 @@ import { supabase } from '@/lib/supabase';
 import { getEffectiveSalary, getMergedBenefits } from '@/lib/compensation';
 import { apiUrl } from '@/lib/api';
 import { companyBranding } from '@/config/branding';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 interface Employee {
   id: string;
@@ -111,6 +112,7 @@ interface LeaveBalanceLine {
 const PayrollPage: React.FC = () => {
   const { selectedCompany } = useCompany();
   const { user } = useAuth();
+  const schedule = useTimeouts();
 
   // Determine user role
   const isSuperAdmin = user?.roles?.some(r => r.role_name === 'Super Admin') ?? false;
@@ -832,7 +834,7 @@ const PayrollPage: React.FC = () => {
       setMessage({ type: 'success', text: 'Payroll processed successfully' });
       closeModal();
       fetchPayroll();
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : JSON.stringify(err);
       setModalError(`Failed to process payroll: ${msg}`);
@@ -873,7 +875,7 @@ const PayrollPage: React.FC = () => {
       if (!res.ok) throw new Error(json.error || 'Delete failed');
 
       setMessage({ type: 'success', text: 'Payroll record deleted' });
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
       fetchPayroll(); // reconcile with the server
     } catch (err) {
       setPayrollData(previous); // put the row back — the delete did not happen
@@ -993,7 +995,7 @@ const PayrollPage: React.FC = () => {
       render: (v: string) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
           v === 'Paid' ? 'bg-green-100 text-green-800' :
-          v === 'Processed' ? 'bg-blue-100 text-blue-800' :
+          v === 'Processed' ? 'bg-accent text-primary' :
           'bg-yellow-100 text-yellow-800'
         }`}>{v}</span>
       ),
@@ -1005,7 +1007,7 @@ const PayrollPage: React.FC = () => {
           {/* View payslip — always available once payroll is generated */}
           <button
             onClick={() => viewPayslip(row)}
-            className="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-600 hover:bg-blue-50 transition"
+            className="text-xs px-2.5 py-1 rounded border border-primary/30 text-primary hover:bg-accent transition"
           >
             {isEmployee ? 'View Payslip' : 'Payslip'}
           </button>
@@ -1028,13 +1030,13 @@ const PayrollPage: React.FC = () => {
                   deletePayroll(row.id);
                 }
               }}
-              className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+              className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition"
               title="Delete to allow reprocessing"
             >
               <Trash2 size={14} />
             </button>
           ) : (
-            <span className="text-xs text-gray-400 px-1.5" title="Paid records cannot be deleted">🔒</span>
+            <span className="text-xs text-muted-foreground px-1.5" title="Paid records cannot be deleted">🔒</span>
           ))}
         </div>
       ),
@@ -1264,10 +1266,10 @@ ${payslipLeaveBalances.length > 0 ? `
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl font-bold text-foreground">
               {isEmployee ? 'My Payroll' : 'Payroll Management'}
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-muted-foreground mt-1">
               {isEmployee
                 ? 'View your payroll records'
                 : selectedCompany ? `Manage payroll for ${selectedCompany.name}` : 'Select a company to manage payroll'}
@@ -1286,14 +1288,14 @@ ${payslipLeaveBalances.length > 0 ? `
         </div>
 
         {message && (
-          <div className={`p-4 rounded-lg border ${message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          <div className={`p-4 rounded-lg border ${message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-destructive/10 border-destructive/20 text-red-800'}`}>
             {message.text}
           </div>
         )}
 
         {!selectedCompany && !isEmployee && (
-          <Card className="bg-blue-50 border border-blue-200">
-            <p className="text-blue-700 text-center py-4">Please select a company from the header to manage payroll</p>
+          <Card className="bg-accent border border-primary/20">
+            <p className="text-primary text-center py-4">Please select a company from the header to manage payroll</p>
           </Card>
         )}
 
@@ -1301,14 +1303,14 @@ ${payslipLeaveBalances.length > 0 ? `
           <>
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
               </div>
             ) : (
               <>
                 {/* Month Selector */}
                 <Card>
                   <div className="flex items-center gap-4">
-                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <label className="text-sm font-medium text-foreground flex items-center gap-2">
                       <Calendar size={16} /> Select Month:
                     </label>
                     <MonthSelect value={selectedMonth} onChange={setSelectedMonth} />
@@ -1318,24 +1320,24 @@ ${payslipLeaveBalances.length > 0 ? `
                 {/* Summary */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   {[
-                    { label: 'Total Basic Salary', value: summary.total_salary, color: 'text-gray-900' },
-                    { label: 'Total Allowances', value: summary.total_allowances, color: 'text-blue-600' },
-                    { label: 'Total Deductions', value: summary.total_deductions, color: 'text-red-600' },
+                    { label: 'Total Basic Salary', value: summary.total_salary, color: 'text-foreground' },
+                    { label: 'Total Allowances', value: summary.total_allowances, color: 'text-primary' },
+                    { label: 'Total Deductions', value: summary.total_deductions, color: 'text-destructive' },
                     { label: 'Net Payroll', value: summary.total_net, color: 'text-green-600' },
                   ].map(s => (
                     <Card key={s.label}>
                       <div className="text-center">
-                        <p className="text-gray-500 text-xs mb-1">{s.label}</p>
+                        <p className="text-muted-foreground text-xs mb-1">{s.label}</p>
                         <p className={`text-lg font-bold ${s.color}`}>{fmt(s.value)}</p>
                       </div>
                     </Card>
                   ))}
                   <Card>
                     <div className="text-center">
-                      <p className="text-gray-500 text-xs mb-1">Status</p>
+                      <p className="text-muted-foreground text-xs mb-1">Status</p>
                       <p className="text-sm mt-1">
                         <span className="font-semibold text-green-600">{summary.paid}</span> Paid ·{' '}
-                        <span className="font-semibold text-blue-600">{summary.processed}</span> Processed
+                        <span className="font-semibold text-primary">{summary.processed}</span> Processed
                       </p>
                     </div>
                   </Card>
@@ -1345,34 +1347,34 @@ ${payslipLeaveBalances.length > 0 ? `
                 {/* ── Employee Benefits Panel ─────────────── */}
                 {showSelfBenefits && (
                   <Card className="p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">My Benefits Package</h2>
+                    <h2 className="text-lg font-semibold text-foreground mb-4">My Benefits Package</h2>
                     {myBenefitsLoading ? (
                       <div className="flex justify-center py-4">
-                        <div className="w-6 h-6 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                        <div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
                       </div>
                     ) : myBenefits.length === 0 ? (
-                      <p className="text-gray-500 text-sm">No benefits configured for your grade yet.</p>
+                      <p className="text-muted-foreground text-sm">No benefits configured for your grade yet.</p>
                     ) : (
                       <div className="space-y-2">
-                        <div className="flex justify-between py-2 border-b border-gray-100">
-                          <span className="text-sm text-gray-600">Basic Salary</span>
-                          <span className="text-sm font-semibold text-gray-900">{fmt(myBasicSalary)}</span>
+                        <div className="flex justify-between py-2 border-b border-border">
+                          <span className="text-sm text-muted-foreground">Basic Salary</span>
+                          <span className="text-sm font-semibold text-foreground">{fmt(myBasicSalary)}</span>
                         </div>
                         {myBenefits.map(b => (
                           <div key={b.id} className="flex justify-between py-1.5">
-                            <span className={`text-sm ${b.included ? 'text-gray-700' : 'text-gray-400'}`}>
+                            <span className={`text-sm ${b.included ? 'text-foreground' : 'text-muted-foreground'}`}>
                               {b.benefit_type}
                               {!b.included && b.reason_excluded && (
-                                <span className="ml-2 text-xs text-gray-400">({b.reason_excluded})</span>
+                                <span className="ml-2 text-xs text-muted-foreground">({b.reason_excluded})</span>
                               )}
                             </span>
-                            <span className={`text-sm font-medium ${b.included ? 'text-blue-700' : 'text-gray-400'}`}>
+                            <span className={`text-sm font-medium ${b.included ? 'text-primary' : 'text-muted-foreground'}`}>
                               {b.included ? fmt(b.computed_amount) : '—'}
                             </span>
                           </div>
                         ))}
-                        <div className="flex justify-between py-2 border-t border-gray-200 mt-2">
-                          <span className="text-sm font-semibold text-gray-900">Total Package (this month)</span>
+                        <div className="flex justify-between py-2 border-t border-border mt-2">
+                          <span className="text-sm font-semibold text-foreground">Total Package (this month)</span>
                           <span className="text-sm font-bold text-green-700">
                             {fmt(myBasicSalary + myBenefits.filter(b => b.included).reduce((s, b) => s + b.computed_amount, 0))}
                           </span>
@@ -1385,7 +1387,7 @@ ${payslipLeaveBalances.length > 0 ? `
                 {/* ── Payroll Records + Print ──────────────── */}
                 <Card header={<h2 className="text-lg font-semibold">Payroll Details — {selectedMonth}</h2>} noPadding>
                   {payrollData.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">No payroll records for {selectedMonth}</div>
+                    <div className="p-8 text-center text-muted-foreground">No payroll records for {selectedMonth}</div>
                   ) : (
                     <Table columns={columns} data={payrollData} />
                   )}
@@ -1417,12 +1419,12 @@ ${payslipLeaveBalances.length > 0 ? `
       >
         <div className="space-y-5">
           {modalError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{modalError}</div>
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">{modalError}</div>
           )}
 
           {/* Employee */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Employee *</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Employee *</label>
             <SelectMenu
               value={selectedEmployeeId}
               onChange={setSelectedEmployeeId}
@@ -1436,28 +1438,28 @@ ${payslipLeaveBalances.length > 0 ? `
 
           {/* Month */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+            <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
               <Calendar size={14} /> Payroll Month *
             </label>
             <MonthSelect value={selectedPayrollMonth} onChange={setSelectedPayrollMonth} className="w-full" />
-            <p className="mt-1.5 text-xs text-gray-500 flex items-center gap-1">
+            <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
               <Plane size={12} /> Annual benefits (e.g. air ticket) can be ticked in the breakdown below to pay once this year.
             </p>
           </div>
 
           {/* Benefits Breakdown */}
           {selectedEmployeeId && (
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-200 flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-700">Payroll Breakdown</span>
-                {loadingBenefits && <span className="text-xs text-gray-400 animate-pulse">Loading grade data…</span>}
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="bg-muted px-4 py-2.5 border-b border-border flex items-center justify-between">
+                <span className="text-sm font-semibold text-foreground">Payroll Breakdown</span>
+                {loadingBenefits && <span className="text-xs text-muted-foreground animate-pulse">Loading grade data…</span>}
               </div>
 
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-border">
                 {/* Basic Salary */}
                 <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800">Basic Salary</span>
-                  <span className="text-sm font-semibold text-gray-900">{fmt(basicSalary)}</span>
+                  <span className="text-sm font-medium text-foreground">Basic Salary</span>
+                  <span className="text-sm font-semibold text-foreground">{fmt(basicSalary)}</span>
                 </div>
 
                 {/* Benefit lines */}
@@ -1472,14 +1474,14 @@ ${payslipLeaveBalances.length > 0 ? `
                           type="checkbox"
                           checked={b.included}
                           onChange={(e) => setBenefitLines(prev => prev.map(x => x.id === b.id ? { ...x, included: e.target.checked } : x))}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="w-4 h-4 rounded border-input text-primary focus:ring-ring"
                           title="Include this annual benefit in this month's payroll"
                         />
                       )}
-                      {b.is_annual && <Plane size={13} className="text-blue-500" />}
-                      <span className="text-sm text-gray-700">{b.benefit_type}</span>
+                      {b.is_annual && <Plane size={13} className="text-primary" />}
+                      <span className="text-sm text-foreground">{b.benefit_type}</span>
                       {b.is_annual && (
-                        <span className="text-[10px] uppercase tracking-wide bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">Annual</span>
+                        <span className="text-[10px] uppercase tracking-wide bg-accent text-primary px-1.5 py-0.5 rounded">Annual</span>
                       )}
                       {b.already_paid_month && b.reason_excluded && (
                         <span className="text-xs text-green-600 flex items-center gap-1">
@@ -1487,10 +1489,10 @@ ${payslipLeaveBalances.length > 0 ? `
                         </span>
                       )}
                       {annualSelectable && !b.included && (
-                        <span className="text-xs text-gray-400">— tick to pay this month (once per year)</span>
+                        <span className="text-xs text-muted-foreground">— tick to pay this month (once per year)</span>
                       )}
                     </div>
-                    <span className={`text-sm font-medium ${b.included ? 'text-green-700' : 'text-gray-400'}`}>
+                    <span className={`text-sm font-medium ${b.included ? 'text-green-700' : 'text-muted-foreground'}`}>
                       + {fmt(b.value_type === 'percentage' ? Math.round((b.benefit_value / 100) * basicSalary * 100) / 100 : b.benefit_value)}
                     </span>
                   </div>
@@ -1498,25 +1500,25 @@ ${payslipLeaveBalances.length > 0 ? `
                 })}
 
                 {benefitLines.length === 0 && !loadingBenefits && selectedEmployeeId && !modalError && (
-                  <div className="px-4 py-3 text-sm text-gray-400 italic">No benefits configured for this grade</div>
+                  <div className="px-4 py-3 text-sm text-muted-foreground italic">No benefits configured for this grade</div>
                 )}
 
                 {/* Total Allowances */}
                 {totalAllowances > 0 && (
-                  <div className="px-4 py-3 flex items-center justify-between bg-blue-50">
-                    <span className="text-sm font-semibold text-blue-800">Total Allowances</span>
-                    <span className="text-sm font-semibold text-blue-800">{fmt(totalAllowances)}</span>
+                  <div className="px-4 py-3 flex items-center justify-between bg-accent">
+                    <span className="text-sm font-semibold text-primary">Total Allowances</span>
+                    <span className="text-sm font-semibold text-primary">{fmt(totalAllowances)}</span>
                   </div>
                 )}
 
                 {/* Excess leave deduction */}
                 {leaveDeductionDays > 0 && (
-                  <div className="px-4 py-3 flex items-center justify-between bg-red-50">
+                  <div className="px-4 py-3 flex items-center justify-between bg-destructive/10">
                     <div>
                       <span className="text-sm font-medium text-red-800">Excess Leave Deduction</span>
-                      <span className="text-xs text-red-600 ml-2">({leaveDeductionDays} day{leaveDeductionDays !== 1 ? 's' : ''} over quota × daily wage)</span>
+                      <span className="text-xs text-destructive ml-2">({leaveDeductionDays} day{leaveDeductionDays !== 1 ? 's' : ''} over quota × daily wage)</span>
                     </div>
-                    <span className="text-sm font-semibold text-red-700">
+                    <span className="text-sm font-semibold text-destructive">
                       - {fmt(Math.round(leaveDeductionDays * ((basicSalary + benefitLines.filter(b => b.included && !b.is_annual).reduce((s,b) => s + b.computed_amount, 0)) / 30) * 100) / 100)}
                     </span>
                   </div>
@@ -1540,21 +1542,21 @@ ${payslipLeaveBalances.length > 0 ? `
                     description and can be listed several times. */}
                 <div className="px-4 py-3 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">Extra Adjustments</span>
+                    <span className="text-sm font-medium text-foreground">Extra Adjustments</span>
                     {adjustments.length > 0 && (
-                      <span className={`text-sm font-semibold ${adjustmentSigned >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                      <span className={`text-sm font-semibold ${adjustmentSigned >= 0 ? 'text-green-700' : 'text-destructive'}`}>
                         {adjustmentSigned >= 0 ? '+' : '−'} {fmt(Math.abs(adjustmentSigned))}
                       </span>
                     )}
                   </div>
 
                   {adjustments.map((row) => (
-                    <div key={row.id} className="space-y-2 rounded-lg border border-gray-200 p-2.5">
+                    <div key={row.id} className="space-y-2 rounded-lg border border-border p-2.5">
                       <div className="flex items-center gap-2">
                         <select
                           value={row.type}
                           onChange={e => updateAdjustmentRow(row.id, { type: e.target.value as 'add' | 'deduct' })}
-                          className="select-sm px-2 py-1 border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="select-sm px-2 py-1 border border-input rounded bg-card focus:outline-none focus:ring-1 focus:ring-ring"
                         >
                           <option value="add">Add (+)</option>
                           <option value="deduct">Deduct (−)</option>
@@ -1566,13 +1568,13 @@ ${payslipLeaveBalances.length > 0 ? `
                           value={row.amount || ''}
                           onChange={e => updateAdjustmentRow(row.id, { amount: Math.abs(parseFloat(e.target.value) || 0) })}
                           placeholder="0.00"
-                          className={`flex-1 min-w-0 text-right px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${row.type === 'add' ? 'text-green-700' : 'text-red-600'}`}
+                          className={`flex-1 min-w-0 text-right px-2 py-1 border border-input rounded text-sm focus:outline-none focus:ring-1 focus:ring-ring ${row.type === 'add' ? 'text-green-700' : 'text-destructive'}`}
                         />
                         <button
                           type="button"
                           onClick={() => removeAdjustmentRow(row.id)}
                           title="Remove this adjustment"
-                          className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -1583,7 +1585,7 @@ ${payslipLeaveBalances.length > 0 ? `
                         value={row.note}
                         onChange={e => updateAdjustmentRow(row.id, { note: e.target.value })}
                         placeholder="Short description (e.g. performance bonus, advance recovery)"
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-2 py-1.5 border border-input rounded text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </div>
                   ))}
@@ -1591,7 +1593,7 @@ ${payslipLeaveBalances.length > 0 ? `
                   <button
                     type="button"
                     onClick={addAdjustmentRow}
-                    className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+                    className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary"
                   >
                     <Plus size={16} /> Add adjustment
                   </button>
@@ -1608,34 +1610,34 @@ ${payslipLeaveBalances.length > 0 ? `
 
           {/* Leave for THIS payroll month */}
           {selectedEmployeeId && (
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-200">
-                <span className="text-sm font-semibold text-gray-700">
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="bg-muted px-4 py-2.5 border-b border-border">
+                <span className="text-sm font-semibold text-foreground">
                   Leaves in {new Date(selectedPayrollMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}
                 </span>
               </div>
               {monthLeaves.length === 0 ? (
-                <p className="px-4 py-3 text-xs text-gray-400 italic">No leaves recorded for this month</p>
+                <p className="px-4 py-3 text-xs text-muted-foreground italic">No leaves recorded for this month</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
+                    <tr className="bg-muted border-b border-border text-muted-foreground">
                       <th className="text-left px-4 py-2 font-medium">Type</th>
                       <th className="text-left px-3 py-2 font-medium">Dates</th>
                       <th className="text-center px-3 py-2 font-medium">Days</th>
                       <th className="text-center px-3 py-2 font-medium">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-border">
                     {monthLeaves.map((l, i) => (
                       <tr key={i} className={l.status !== 'Approved' ? 'bg-orange-50' : ''}>
-                        <td className="px-4 py-2 text-gray-700">{l.leave_type}</td>
-                        <td className="px-3 py-2 text-gray-500">{l.start_date} → {l.end_date}</td>
-                        <td className="px-3 py-2 text-center font-semibold text-gray-800">{l.days}</td>
+                        <td className="px-4 py-2 text-foreground">{l.leave_type}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{l.start_date} → {l.end_date}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-foreground">{l.days}</td>
                         <td className="px-3 py-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
                             l.status === 'Approved' ? 'bg-green-100 text-green-700' :
-                            l.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                            l.status === 'Rejected' ? 'bg-destructive/15 text-destructive' :
                             'bg-orange-100 text-orange-700'
                           }`}>{l.status}</span>
                         </td>
@@ -1649,26 +1651,26 @@ ${payslipLeaveBalances.length > 0 ? `
 
           {/* Year-to-date leave balance vs quota */}
           {selectedEmployeeId && leaveBalances.length > 0 && (
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-200">
-                <span className="text-sm font-semibold text-gray-700">Year-to-Date Balance ({selectedPayrollMonth.split('-')[0]})</span>
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="bg-muted px-4 py-2.5 border-b border-border">
+                <span className="text-sm font-semibold text-foreground">Year-to-Date Balance ({selectedPayrollMonth.split('-')[0]})</span>
               </div>
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
+                  <tr className="bg-muted border-b border-border text-muted-foreground">
                     <th className="text-left px-4 py-2 font-medium">Type</th>
                     <th className="text-center px-3 py-2 font-medium">Quota</th>
                     <th className="text-center px-3 py-2 font-medium">Taken (YTD)</th>
                     <th className="text-center px-3 py-2 font-medium">Balance</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border">
                   {leaveBalances.map(lb => (
-                    <tr key={lb.leave_type_id} className={lb.excess_days > 0 ? 'bg-red-50' : ''}>
-                      <td className="px-4 py-2 text-gray-700">{lb.leave_type_name}</td>
-                      <td className="px-3 py-2 text-center text-gray-700">{lb.total_days}</td>
-                      <td className="px-3 py-2 text-center text-gray-700">{lb.used_days}</td>
-                      <td className={`px-3 py-2 text-center font-semibold ${lb.excess_days > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    <tr key={lb.leave_type_id} className={lb.excess_days > 0 ? 'bg-destructive/10' : ''}>
+                      <td className="px-4 py-2 text-foreground">{lb.leave_type_name}</td>
+                      <td className="px-3 py-2 text-center text-foreground">{lb.total_days}</td>
+                      <td className="px-3 py-2 text-center text-foreground">{lb.used_days}</td>
+                      <td className={`px-3 py-2 text-center font-semibold ${lb.excess_days > 0 ? 'text-destructive' : 'text-green-700'}`}>
                         {lb.excess_days > 0 ? `-${lb.excess_days} excess` : lb.remaining_days}
                       </td>
                     </tr>
@@ -1712,7 +1714,7 @@ ${payslipLeaveBalances.length > 0 ? `
       >
         {loadingPayslip ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
           </div>
         ) : payslipRecord && (() => {
           const emp = employees.find(e => e.id === payslipRecord.employee_id);
@@ -1723,62 +1725,62 @@ ${payslipLeaveBalances.length > 0 ? `
           return (
             <div id="payslip-content" className="space-y-5 print:text-sm">
               {/* Header */}
-              <div className="flex items-start justify-between pb-4 border-b border-gray-200">
+              <div className="flex items-start justify-between pb-4 border-b border-border">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{selectedCompany?.name}</h2>
-                  <p className="text-sm text-gray-500 mt-0.5">Payslip for {monthLabel}</p>
+                  <h2 className="text-xl font-bold text-foreground">{selectedCompany?.name}</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">Payslip for {monthLabel}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  payslipRecord.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                  payslipRecord.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-accent text-primary'
                 }`}>{payslipRecord.status}</span>
               </div>
 
               {/* Employee details */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Employee</p>
-                  <p className="text-base font-semibold text-gray-900 mt-0.5">
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Employee</p>
+                  <p className="text-base font-semibold text-foreground mt-0.5">
                     {emp ? `${emp.first_name} ${emp.last_name}` : '—'}
                   </p>
-                  {emp?.position && <p className="text-sm text-gray-500">{emp.position}</p>}
+                  {emp?.position && <p className="text-sm text-muted-foreground">{emp.position}</p>}
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase font-medium">Pay Period</p>
-                  <p className="text-base font-semibold text-gray-900 mt-0.5">{monthLabel}</p>
+                  <p className="text-xs text-muted-foreground uppercase font-medium">Pay Period</p>
+                  <p className="text-base font-semibold text-foreground mt-0.5">{monthLabel}</p>
                 </div>
               </div>
 
               {/* Earnings breakdown */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Earnings</span>
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="bg-muted px-4 py-2 border-b border-border">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Earnings</span>
                 </div>
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-border">
                   <div className="flex justify-between px-4 py-2.5">
-                    <span className="text-sm text-gray-700">Basic Salary</span>
-                    <span className="text-sm font-semibold text-gray-900">{fmt(payslipRecord.salary)}</span>
+                    <span className="text-sm text-foreground">Basic Salary</span>
+                    <span className="text-sm font-semibold text-foreground">{fmt(payslipRecord.salary)}</span>
                   </div>
                   {includedLines.map(b => (
                     <div key={b.id} className="flex justify-between px-4 py-2.5">
-                      <span className="text-sm text-gray-700">{b.benefit_type}
+                      <span className="text-sm text-foreground">{b.benefit_type}
                         {b.value_type === 'percentage' && (
-                          <span className="text-xs text-gray-400 ml-1">({b.benefit_value}%)</span>
+                          <span className="text-xs text-muted-foreground ml-1">({b.benefit_value}%)</span>
                         )}
                       </span>
-                      <span className="text-sm text-gray-800">{fmt(b.computed_amount)}</span>
+                      <span className="text-sm text-foreground">{fmt(b.computed_amount)}</span>
                     </div>
                   ))}
                   {payslipAdjustments.filter(a => a.type === 'add').map((a, i) => (
                     <div key={`adj-add-${i}`} className="flex justify-between px-4 py-2.5">
-                      <span className="text-sm text-gray-700">
+                      <span className="text-sm text-foreground">
                         {a.note || 'Adjustment'}
                       </span>
                       <span className="text-sm font-semibold text-green-700">{fmt(a.amount)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between px-4 py-2.5 bg-blue-50">
-                    <span className="text-sm font-semibold text-blue-800">Total Earnings</span>
-                    <span className="text-sm font-semibold text-blue-800">{fmt(payslipRecord.salary + payslipRecord.bonus + payslipAdjustments.filter(a => a.type === 'add').reduce((s, a) => s + a.amount, 0))}</span>
+                  <div className="flex justify-between px-4 py-2.5 bg-accent">
+                    <span className="text-sm font-semibold text-primary">Total Earnings</span>
+                    <span className="text-sm font-semibold text-primary">{fmt(payslipRecord.salary + payslipRecord.bonus + payslipAdjustments.filter(a => a.type === 'add').reduce((s, a) => s + a.amount, 0))}</span>
                   </div>
                 </div>
               </div>
@@ -1786,35 +1788,35 @@ ${payslipLeaveBalances.length > 0 ? `
               {/* Deductions — leave deduction, any legacy "other deductions",
                   and deduct-type adjustments, with a combined total. */}
               {(payslipRecord.deductions > 0 || payslipAdjustments.some(a => a.type === 'deduct')) && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Deductions</span>
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="bg-muted px-4 py-2 border-b border-border">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Deductions</span>
                   </div>
-                  <div className="divide-y divide-gray-100">
+                  <div className="divide-y divide-border">
                     {payslipRecord.leave_deduction_amount > 0 && (
                       <div className="flex justify-between px-4 py-2.5">
-                        <span className="text-sm text-gray-700">
+                        <span className="text-sm text-foreground">
                           Leave Deduction
-                          <span className="text-xs text-red-500 ml-1">({payslipRecord.leave_deduction_days} excess day{payslipRecord.leave_deduction_days !== 1 ? 's' : ''})</span>
+                          <span className="text-xs text-destructive ml-1">({payslipRecord.leave_deduction_days} excess day{payslipRecord.leave_deduction_days !== 1 ? 's' : ''})</span>
                         </span>
-                        <span className="text-sm font-semibold text-red-600">{fmt(payslipRecord.leave_deduction_amount)}</span>
+                        <span className="text-sm font-semibold text-destructive">{fmt(payslipRecord.leave_deduction_amount)}</span>
                       </div>
                     )}
                     {(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0)) > 0 && (
                       <div className="flex justify-between px-4 py-2.5">
-                        <span className="text-sm text-gray-700">Other Deductions</span>
-                        <span className="text-sm font-semibold text-red-600">{fmt(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0))}</span>
+                        <span className="text-sm text-foreground">Other Deductions</span>
+                        <span className="text-sm font-semibold text-destructive">{fmt(payslipRecord.deductions - (payslipRecord.leave_deduction_amount || 0))}</span>
                       </div>
                     )}
                     {payslipAdjustments.filter(a => a.type === 'deduct').map((a, i) => (
                       <div key={`adj-ded-${i}`} className="flex justify-between px-4 py-2.5">
-                        <span className="text-sm text-gray-700">{a.note || 'Adjustment'}</span>
-                        <span className="text-sm font-semibold text-red-600">{fmt(a.amount)}</span>
+                        <span className="text-sm text-foreground">{a.note || 'Adjustment'}</span>
+                        <span className="text-sm font-semibold text-destructive">{fmt(a.amount)}</span>
                       </div>
                     ))}
-                    <div className="flex justify-between px-4 py-2.5 bg-red-50">
+                    <div className="flex justify-between px-4 py-2.5 bg-destructive/10">
                       <span className="text-sm font-semibold text-red-800">Total Deductions</span>
-                      <span className="text-sm font-semibold text-red-700">
+                      <span className="text-sm font-semibold text-destructive">
                         {fmt((payslipRecord.deductions || 0) + payslipAdjustments.filter(a => a.type === 'deduct').reduce((s, a) => s + a.amount, 0))}
                       </span>
                     </div>
@@ -1824,28 +1826,28 @@ ${payslipLeaveBalances.length > 0 ? `
 
               {/* Leave Balance Summary */}
               {payslipLeaveBalances.length > 0 && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="bg-muted px-4 py-2 border-b border-border">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Leave Balance — {payslipRecord.month?.split('-')[0]}
                     </span>
                   </div>
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
+                      <tr className="bg-muted border-b border-border text-muted-foreground">
                         <th className="text-left px-4 py-2 font-medium">Leave Type</th>
                         <th className="text-center px-3 py-2 font-medium">Total Quota</th>
                         <th className="text-center px-3 py-2 font-medium">Taken</th>
                         <th className="text-center px-3 py-2 font-medium">Balance</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border">
                       {payslipLeaveBalances.map(lb => (
-                        <tr key={lb.leave_type_id} className={lb.excess_days > 0 ? 'bg-red-50' : ''}>
-                          <td className="px-4 py-2 text-gray-700">{lb.leave_type_name}</td>
-                          <td className="px-3 py-2 text-center text-gray-700">{lb.total_days}</td>
-                          <td className="px-3 py-2 text-center text-gray-700">{lb.used_days}</td>
-                          <td className={`px-3 py-2 text-center font-semibold ${lb.excess_days > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                        <tr key={lb.leave_type_id} className={lb.excess_days > 0 ? 'bg-destructive/10' : ''}>
+                          <td className="px-4 py-2 text-foreground">{lb.leave_type_name}</td>
+                          <td className="px-3 py-2 text-center text-foreground">{lb.total_days}</td>
+                          <td className="px-3 py-2 text-center text-foreground">{lb.used_days}</td>
+                          <td className={`px-3 py-2 text-center font-semibold ${lb.excess_days > 0 ? 'text-destructive' : 'text-green-700'}`}>
                             {lb.excess_days > 0 ? `-${lb.excess_days} (excess)` : lb.remaining_days}
                           </td>
                         </tr>
@@ -1889,16 +1891,16 @@ ${payslipLeaveBalances.length > 0 ? `
           {!batchRunning && !batchDone && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
+                <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
                   <Calendar size={14} /> Payroll Month *
                 </label>
                 <MonthSelect value={batchMonth} onChange={setBatchMonth} />
-                <p className="mt-1.5 text-xs text-gray-500 flex items-center gap-1">
+                <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
                   <Info size={12} /> Batch pays monthly benefits only. Annual benefits (air ticket) are paid per-employee via Process Single.
                 </p>
               </div>
 
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+              <div className="p-3 bg-accent border border-primary/20 rounded-lg text-sm text-primary">
                 <strong>{employees.length}</strong> active employees found for <strong>{selectedCompany?.name}</strong>.
                 Employees already processed this month will be skipped. Employees without a grade will be skipped.
               </div>
@@ -1908,13 +1910,13 @@ ${payslipLeaveBalances.length > 0 ? `
           {/* Progress bar */}
           {(batchRunning || batchDone) && (
             <div>
-              <div className="flex justify-between text-sm text-gray-600 mb-1">
+              <div className="flex justify-between text-sm text-muted-foreground mb-1">
                 <span>Progress</span>
                 <span>{batchProgress} / {employees.length}</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="w-full bg-muted rounded-full h-2.5">
                 <div
-                  className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  className="bg-primary h-2.5 rounded-full transition-all duration-300"
                   style={{ width: `${employees.length > 0 ? (batchProgress / employees.length) * 100 : 0}%` }}
                 />
               </div>
@@ -1926,8 +1928,8 @@ ${payslipLeaveBalances.length > 0 ? `
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: 'Processed', count: batchResults.filter(r => r.status === 'processed').length, color: 'bg-green-50 border-green-200 text-green-800' },
-                { label: 'Skipped', count: batchResults.filter(r => r.status === 'skipped').length, color: 'bg-gray-50 border-gray-200 text-gray-600' },
-                { label: 'Errors / No Grade', count: batchResults.filter(r => r.status === 'error' || r.status === 'no_grade').length, color: 'bg-red-50 border-red-200 text-red-700' },
+                { label: 'Skipped', count: batchResults.filter(r => r.status === 'skipped').length, color: 'bg-muted border-border text-muted-foreground' },
+                { label: 'Errors / No Grade', count: batchResults.filter(r => r.status === 'error' || r.status === 'no_grade').length, color: 'bg-destructive/10 border-destructive/20 text-destructive' },
               ].map(s => (
                 <div key={s.label} className={`border rounded-lg p-3 text-center ${s.color}`}>
                   <p className="text-2xl font-bold">{s.count}</p>
@@ -1939,16 +1941,16 @@ ${payslipLeaveBalances.length > 0 ? `
 
           {/* Per-employee results list */}
           {batchResults.length > 0 && (
-            <div className="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+            <div className="border border-border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
               {batchResults.map(r => (
-                <div key={r.employee_id} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 last:border-0">
+                <div key={r.employee_id} className="flex items-center justify-between px-4 py-2.5 border-b border-border last:border-0">
                   <div className="flex items-center gap-2.5 min-w-0">
                     {r.status === 'processed'  && <CheckCircle size={15} className="text-green-500 flex-shrink-0" />}
-                    {r.status === 'skipped'    && <SkipForward  size={15} className="text-gray-400 flex-shrink-0" />}
-                    {r.status === 'error'      && <XCircle      size={15} className="text-red-500 flex-shrink-0" />}
+                    {r.status === 'skipped'    && <SkipForward  size={15} className="text-muted-foreground flex-shrink-0" />}
+                    {r.status === 'error'      && <XCircle      size={15} className="text-destructive flex-shrink-0" />}
                     {r.status === 'no_grade'   && <XCircle      size={15} className="text-orange-400 flex-shrink-0" />}
-                    <span className="text-sm text-gray-800 truncate">{r.employee_name}</span>
-                    {r.reason && <span className="text-xs text-gray-400 truncate">— {r.reason}</span>}
+                    <span className="text-sm text-foreground truncate">{r.employee_name}</span>
+                    {r.reason && <span className="text-xs text-muted-foreground truncate">— {r.reason}</span>}
                   </div>
                   {r.net_pay != null && (
                     <span className="text-sm font-semibold text-green-700 flex-shrink-0 ml-2">{fmt(r.net_pay)}</span>

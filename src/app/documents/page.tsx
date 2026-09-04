@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { apiUrl, logActivity } from '@/lib/api';
 import { processFileForUpload, isCompressibleImage, formatFileSize } from '@/lib/imageCompression';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB in bytes
 
@@ -52,6 +53,7 @@ type DocumentFormData = z.infer<typeof documentSchema>;
 const DocumentsPage: React.FC = () => {
   const { selectedCompany } = useCompany();
   const { user } = useAuth();
+  const schedule = useTimeouts();
 
   // Determine user role
   const isDeptManager = user?.roles?.some(r => r.role_name === 'Manager') ?? false;
@@ -85,6 +87,7 @@ const DocumentsPage: React.FC = () => {
 
   // Get current employee ID if user is an employee
   React.useEffect(() => {
+    let cancelled = false;
     const getEmployeeId = async () => {
       if (isEmployee && user?.id) {
         try {
@@ -93,7 +96,7 @@ const DocumentsPage: React.FC = () => {
             .select('id')
             .eq('user_id', user.id)
             .single();
-          if (empData) {
+          if (!cancelled && empData) {
             setCurrentEmployeeId(empData.id);
           }
         } catch (err) {
@@ -102,6 +105,7 @@ const DocumentsPage: React.FC = () => {
       }
     };
     getEmployeeId();
+    return () => { cancelled = true; };
   }, [isEmployee, user?.id]);
 
   const {
@@ -326,7 +330,7 @@ const DocumentsPage: React.FC = () => {
       reset();
       setShowModal(false);
       fetchDocuments();
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       const errMsg = (err as any)?.message || 'Failed to add document';
       setMessage({ type: 'error', text: errMsg });
@@ -346,7 +350,7 @@ const DocumentsPage: React.FC = () => {
   const getStatusIcon = (status: string) => {
     if (status === 'Active') return <CheckCircle size={16} className="text-green-600" />;
     if (status === 'Expiring Soon') return <Clock size={16} className="text-yellow-600" />;
-    return <AlertCircle size={16} className="text-red-600" />;
+    return <AlertCircle size={16} className="text-destructive" />;
   };
 
   const handleViewDocument = async (filePath: string) => {
@@ -414,7 +418,7 @@ const DocumentsPage: React.FC = () => {
 
       setMessage({ type: 'success', text: 'Document deleted successfully' });
       fetchDocuments();
-      setTimeout(() => setMessage(null), 3000);
+      schedule(() => setMessage(null), 3000);
     } catch (err) {
       console.error('Error deleting document:', err);
       setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to delete document' });
@@ -451,7 +455,7 @@ const DocumentsPage: React.FC = () => {
                 ? 'bg-green-100 text-green-800'
                 : value === 'Expiring Soon'
                 ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-red-100 text-red-800'
+                : 'bg-destructive/15 text-red-800'
             }`}
           >
             {value}
@@ -463,7 +467,7 @@ const DocumentsPage: React.FC = () => {
       key: 'days_until_expiry',
       label: 'Days Until Expiry',
       render: (value: number) => {
-        if (value < 0) return <span className="text-red-600 font-semibold">Expired {Math.abs(value)} days ago</span>;
+        if (value < 0) return <span className="text-destructive font-semibold">Expired {Math.abs(value)} days ago</span>;
         return <span className="font-semibold">{value} days</span>;
       },
     },
@@ -475,7 +479,7 @@ const DocumentsPage: React.FC = () => {
           <button
             onClick={() => handleViewDocument(row.file_url)}
             disabled={!row.file_url}
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg disabled:text-gray-400 disabled:cursor-not-allowed transition"
+            className="p-2 text-primary hover:bg-accent rounded-lg disabled:text-muted-foreground disabled:cursor-not-allowed transition"
             title="View document"
           >
             <Eye size={18} />
@@ -483,7 +487,7 @@ const DocumentsPage: React.FC = () => {
           {canDeleteDocuments && (
             <button
               onClick={() => handleDeleteDocument(value, row.document_type)}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+              className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition"
               title="Delete document"
             >
               <Trash2 size={18} />
@@ -499,11 +503,11 @@ const DocumentsPage: React.FC = () => {
       <div className="space-y-6">
         {/* Tab bar — Documents / PDC Cheques */}
         {!isEmployee && (
-          <div className="flex gap-2 border-b border-gray-200">
-            <span className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">
+          <div className="flex gap-2 border-b border-border">
+            <span className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary border-b-2 border-primary -mb-px">
               <FileText size={16} /> Documents
             </span>
-            <Link href="/documents/pdc" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800">
+            <Link href="/documents/pdc" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               <CreditCard size={16} /> PDC Cheques
             </Link>
           </div>
@@ -512,10 +516,10 @@ const DocumentsPage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl font-bold text-foreground">
               {isEmployee ? 'My Documents' : 'Document Management'}
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-muted-foreground mt-1">
               {isEmployee
                 ? 'View your documents'
                 : selectedCompany ? `Track documents for ${selectedCompany.name}` : 'Select a company to manage documents'}
@@ -543,8 +547,8 @@ const DocumentsPage: React.FC = () => {
         </div>
 
         {!selectedCompany && !isEmployee && (
-          <Card className="bg-blue-50 border border-blue-200">
-            <p className="text-blue-700 text-center py-4">Please select a company from the header to manage documents</p>
+          <Card className="bg-accent border border-primary/20">
+            <p className="text-primary text-center py-4">Please select a company from the header to manage documents</p>
           </Card>
         )}
 
@@ -562,7 +566,7 @@ const DocumentsPage: React.FC = () => {
         {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center py-8">
-            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
           </div>
         )}
 
@@ -576,8 +580,8 @@ const DocumentsPage: React.FC = () => {
                 <CheckCircle size={24} className="text-green-600" />
               </div>
               <div>
-                <p className="text-gray-600 text-sm">Active Documents</p>
-                <p className="text-2xl font-bold text-gray-900">{documents.filter(d => d.status === 'Active').length}</p>
+                <p className="text-muted-foreground text-sm">Active Documents</p>
+                <p className="text-2xl font-bold text-foreground">{documents.filter(d => d.status === 'Active').length}</p>
               </div>
             </div>
           </Card>
@@ -587,19 +591,19 @@ const DocumentsPage: React.FC = () => {
                 <Clock size={24} className="text-yellow-600" />
               </div>
               <div>
-                <p className="text-gray-600 text-sm">Expiring Soon</p>
-                <p className="text-2xl font-bold text-gray-900">{documents.filter(d => d.status === 'Expiring Soon').length}</p>
+                <p className="text-muted-foreground text-sm">Expiring Soon</p>
+                <p className="text-2xl font-bold text-foreground">{documents.filter(d => d.status === 'Expiring Soon').length}</p>
               </div>
             </div>
           </Card>
           <Card>
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-red-100 rounded-lg">
-                <AlertCircle size={24} className="text-red-600" />
+              <div className="p-3 bg-destructive/15 rounded-lg">
+                <AlertCircle size={24} className="text-destructive" />
               </div>
               <div>
-                <p className="text-gray-600 text-sm">Expired</p>
-                <p className="text-2xl font-bold text-gray-900">{documents.filter(d => d.status === 'Expired').length}</p>
+                <p className="text-muted-foreground text-sm">Expired</p>
+                <p className="text-2xl font-bold text-foreground">{documents.filter(d => d.status === 'Expired').length}</p>
               </div>
             </div>
           </Card>
@@ -614,8 +618,8 @@ const DocumentsPage: React.FC = () => {
                 onClick={() => setDocumentFilter(filter)}
                 className={`px-4 py-2 rounded-lg font-medium transition ${
                   documentFilter === filter
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-primary text-white'
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                 }`}
               >
                 {filter === 'all' && 'All Documents'}
@@ -632,7 +636,7 @@ const DocumentsPage: React.FC = () => {
           noPadding
         >
           {filteredDocuments.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
               No documents found
             </div>
           ) : (
@@ -675,14 +679,14 @@ const DocumentsPage: React.FC = () => {
             <div className={`p-3 rounded-lg ${
               message.type === 'success'
                 ? 'bg-green-50 border border-green-200 text-green-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
+                : 'bg-destructive/10 border border-destructive/20 text-destructive'
             }`}>
               {message.text}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Document Owner</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Document Owner</label>
             <SelectMenu
               value={watch('employee_id') || ''}
               onChange={(v) => setValue('employee_id', v, { shouldValidate: true })}
@@ -692,7 +696,7 @@ const DocumentsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Document Type</label>
             <SelectMenu
               value={watch('document_type') || ''}
               onChange={(v) => setValue('document_type', v, { shouldValidate: true })}
@@ -701,87 +705,87 @@ const DocumentsPage: React.FC = () => {
                 .map(t => ({ value: t, label: t }))}
             />
             {errors.document_type && (
-              <p className="mt-1 text-sm text-red-600">{errors.document_type.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.document_type.message}</p>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Issue Date</label>
+              <label className="block text-sm font-medium text-foreground mb-2">Issue Date</label>
               <DatePicker
                 value={issueDate}
                 onChange={(date) => setValue('issue_date', date)}
                 placeholder="Select issue date"
               />
               {errors.issue_date && (
-                <p className="mt-1 text-sm text-red-600">{errors.issue_date.message}</p>
+                <p className="mt-1 text-sm text-destructive">{errors.issue_date.message}</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
+              <label className="block text-sm font-medium text-foreground mb-2">Expiry Date</label>
               <DatePicker
                 value={expiryDate}
                 onChange={(date) => setValue('expiry_date', date)}
                 placeholder="Select expiry date"
               />
               {errors.expiry_date && (
-                <p className="mt-1 text-sm text-red-600">{errors.expiry_date.message}</p>
+                <p className="mt-1 text-sm text-destructive">{errors.expiry_date.message}</p>
               )}
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Document Number</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Document Number</label>
             <input
               {...register('document_number')}
               type="text"
               placeholder="Enter document number"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             />
             {errors.document_number && (
-              <p className="mt-1 text-sm text-red-600">{errors.document_number.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.document_number.message}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Issuing Authority</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Issuing Authority</label>
             <input
               {...register('issuing_authority')}
               type="text"
               placeholder="e.g., UAE RTA, GDRFA, Immigration"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             />
             {errors.issuing_authority && (
-              <p className="mt-1 text-sm text-red-600">{errors.issuing_authority.message}</p>
+              <p className="mt-1 text-sm text-destructive">{errors.issuing_authority.message}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Attach File (Optional)</label>
+            <label className="block text-sm font-medium text-foreground mb-2">Attach File (Optional)</label>
             <input
               {...register('file')}
               type="file"
               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.txt"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Supported formats: PDF, DOC, DOCX, JPG, PNG, WebP, TXT (Max 2 MB)
             </p>
-            <p className="mt-1 text-xs text-blue-600">
+            <p className="mt-1 text-xs text-primary">
               💡 Images are automatically compressed to WebP format for optimal storage
             </p>
             {selectedFile && (
-              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-xs font-medium text-blue-900">📁 Selected File:</p>
-                <p className="text-xs text-blue-700 mt-1">{selectedFile.name}</p>
-                <p className="text-xs text-blue-700">Size: {formatFileSize(selectedFile.size)}</p>
+              <div className="mt-3 p-3 bg-accent rounded-lg border border-primary/20">
+                <p className="text-xs font-medium text-accent-foreground">📁 Selected File:</p>
+                <p className="text-xs text-primary mt-1">{selectedFile.name}</p>
+                <p className="text-xs text-primary">Size: {formatFileSize(selectedFile.size)}</p>
                 {isCompressibleImage(selectedFile) && (
-                  <p className="text-xs text-blue-700 mt-1">✅ Will be compressed to WebP</p>
+                  <p className="text-xs text-primary mt-1">✅ Will be compressed to WebP</p>
                 )}
               </div>
             )}
             {errors.file && errors.file.message && (
-              <p className="mt-1 text-sm text-red-600">{String(errors.file.message)}</p>
+              <p className="mt-1 text-sm text-destructive">{String(errors.file.message)}</p>
             )}
           </div>
         </form>

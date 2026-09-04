@@ -138,8 +138,8 @@ const Sidebar: React.FC = () => {
         onClick={() => setSidebarOpen(false)}
         className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
           active
-            ? 'bg-blue-100 text-blue-600 font-medium'
-            : `text-gray-700 hover:bg-gray-100 ${extraClass}`
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+            : `text-sidebar-foreground hover:bg-sidebar-accent ${extraClass}`
         }`}
       >
         <Icon size={size} />
@@ -153,7 +153,7 @@ const Sidebar: React.FC = () => {
       {/* Mobile Toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="md:hidden fixed top-20 right-4 z-40 p-2 bg-white rounded-lg shadow-md"
+        className="md:hidden fixed top-20 right-4 z-40 p-2 bg-card rounded-lg shadow-md"
       >
         {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -162,20 +162,20 @@ const Sidebar: React.FC = () => {
       <aside
         className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 fixed md:relative left-0 top-0 h-screen md:h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 z-30 md:z-0 pt-20 md:pt-0`}
+        } md:translate-x-0 fixed md:relative left-0 top-0 h-screen md:h-[calc(100vh-4rem)] w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-transform duration-300 z-30 md:z-0 pt-20 md:pt-0`}
       >
         {/* Scrollable nav area — grows to fill space, leaving the footer pinned */}
         <div className="flex-1 overflow-y-auto">
         {/* Company Indicator */}
         {selectedCompany && (
-          <div className="px-4 py-3 m-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Current Company</p>
+          <div className="px-4 py-3 m-4 bg-sidebar-accent rounded-lg border border-sidebar-border">
+            <p className="text-xs font-semibold text-sidebar-foreground uppercase tracking-wide">Current Company</p>
             <div className="flex items-center gap-2 mt-1">
               {companyLogo && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={companyLogo} alt="" className="h-6 w-auto max-w-[80px] object-contain" />
               )}
-              <p className="text-sm font-semibold text-gray-900">{selectedCompany.name}</p>
+              <p className="text-sm font-semibold text-foreground">{selectedCompany.name}</p>
             </div>
           </div>
         )}
@@ -187,8 +187,8 @@ const Sidebar: React.FC = () => {
 
         {/* Admin Section */}
         {isAdmin && visibleAdminItems.length > 0 && (
-          <div className="px-4 mx-4 my-2 border-t border-gray-200 pt-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Administration</p>
+          <div className="px-4 mx-4 my-2 border-t border-sidebar-border pt-4">
+            <p className="text-xs font-semibold text-sidebar-foreground uppercase tracking-widest mb-3">Administration</p>
             <div className="space-y-1">
               {visibleAdminItems.map((item) => {
                 const Icon = item.icon;
@@ -200,8 +200,8 @@ const Sidebar: React.FC = () => {
                     onClick={() => setSidebarOpen(false)}
                     className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors ${
                       active
-                        ? 'bg-purple-100 text-purple-600 font-medium'
-                        : 'text-gray-600 hover:bg-purple-50'
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent'
                     }`}
                   >
                     <Icon size={18} />
@@ -214,18 +214,18 @@ const Sidebar: React.FC = () => {
         )}
         </div>
         {/* Bottom Section — pinned to the bottom via flex (mt-auto), never overlaps the menu */}
-        <div className="mt-auto p-4 border-t border-gray-200 bg-gray-50 space-y-2">
+        <div className="mt-auto p-4 border-t border-sidebar-border bg-sidebar space-y-2">
           <Link
             href="/settings"
             onClick={() => setSidebarOpen(false)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors text-left"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent transition-colors text-left"
           >
             <Settings size={20} />
             <span>Profile Settings</span>
           </Link>
           <button
             onClick={() => { handleLogout(); setSidebarOpen(false); }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors text-left"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-destructive hover:bg-destructive/10 transition-colors text-left"
           >
             <LogOut size={20} />
             <span>Logout</span>

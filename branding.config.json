@@ -9,10 +9,10 @@
     "favicon": "/branding/icon-192.png"
   },
   "colors": {
-    "primary": "#2563EB",
-    "primaryDark": "#1E40AF",
-    "themeColor": "#2563EB",
-    "background": "#ffffff"
+    "primary": "#A32E28",
+    "primaryDark": "#7A1F1C",
+    "themeColor": "#A32E28",
+    "background": "#F8F5F0"
   },
   "companyBranding": {
     "GulfZone": {

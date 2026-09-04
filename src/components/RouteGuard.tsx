@@ -107,8 +107,8 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({ children, fallbackRoute 
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-          <p className="text-gray-600">Loading…</p>
+          <div className="w-8 h-8 border-4 border-accent border-t-primary rounded-full animate-spin" />
+          <p className="text-muted-foreground">Loading…</p>
         </div>
       </div>
     );

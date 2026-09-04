@@ -9,9 +9,11 @@ import { Role } from '@/types/rbac';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import { useTimeouts } from '@/hooks/useTimeouts';
 
 export default function RBACManagementPage() {
   const { user } = useAuth();
+  const schedule = useTimeouts();
   const [roles, setRoles] = useState<Role[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -44,7 +46,7 @@ export default function RBACManagementPage() {
   // Show notification and auto-hide after 3 seconds
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
+    schedule(() => setNotification(null), 3000);
   };
 
   // Check if selected user is SuperAdmin
@@ -425,7 +427,7 @@ export default function RBACManagementPage() {
       setShowCreateUserForm(false);
 
       // Reload data
-      setTimeout(() => {
+      schedule(() => {
         loadData();
       }, 1000);
     } catch (err) {
@@ -441,18 +443,18 @@ export default function RBACManagementPage() {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">RBAC Management</h1>
-          <p className="text-gray-600 mt-2">Manage roles and permissions</p>
+          <h1 className="text-3xl font-bold text-foreground">RBAC Management</h1>
+          <p className="text-muted-foreground mt-2">Manage roles and permissions</p>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 border-b border-gray-200">
+        <div className="flex gap-4 border-b border-border">
           <button
             onClick={() => setActiveTab('roles')}
             className={`px-4 py-3 font-medium border-b-2 transition-colors ${
               activeTab === 'roles'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             Roles
@@ -461,8 +463,8 @@ export default function RBACManagementPage() {
             onClick={() => setActiveTab('users')}
             className={`px-4 py-3 font-medium border-b-2 transition-colors ${
               activeTab === 'users'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             User Assignments
@@ -472,7 +474,7 @@ export default function RBACManagementPage() {
             className={`px-4 py-3 font-medium border-b-2 transition-colors ${
               activeTab === 'create-user'
                 ? 'border-green-500 text-green-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             + Create User
@@ -486,7 +488,7 @@ export default function RBACManagementPage() {
               {/* Roles List */}
               <div className="lg:col-span-1">
                 <Card className="p-4">
-                  <h3 className="font-semibold text-gray-900 mb-4">Roles</h3>
+                  <h3 className="font-semibold text-foreground mb-4">Roles</h3>
                   <div className="space-y-2 max-h-96 overflow-y-auto">
                     {roles.map((role) => (
                       <button
@@ -494,13 +496,13 @@ export default function RBACManagementPage() {
                         onClick={() => setSelectedRole(role.id)}
                         className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
                           selectedRole === role.id
-                            ? 'bg-blue-100 text-blue-900'
-                            : 'hover:bg-gray-100'
+                            ? 'bg-accent text-accent-foreground'
+                            : 'hover:bg-muted'
                         }`}
                       >
                         <div className="font-medium text-sm">{role.name}</div>
                         {role.is_system && (
-                          <div className="text-xs text-gray-600 mt-1">System Role</div>
+                          <div className="text-xs text-muted-foreground mt-1">System Role</div>
                         )}
                       </button>
                     ))}
@@ -516,10 +518,10 @@ export default function RBACManagementPage() {
                       const role = roles.find(r => r.id === selectedRole);
                       return (
                         <Card className="p-6">
-                          <h3 className="font-semibold text-gray-900 mb-4">
+                          <h3 className="font-semibold text-foreground mb-4">
                             {role?.name} - Module Access
                           </h3>
-                          <p className="text-sm text-gray-600 mb-6">
+                          <p className="text-sm text-muted-foreground mb-6">
                             Select the modules this role can access:
                           </p>
                           <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -530,7 +532,7 @@ export default function RBACManagementPage() {
                               return (
                                 <label
                                   key={module.id}
-                                  className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                                  className="flex items-center p-4 border border-border rounded-lg hover:bg-muted cursor-pointer transition-colors"
                                 >
                                   <input
                                     type="checkbox"
@@ -538,17 +540,17 @@ export default function RBACManagementPage() {
                                     onChange={() =>
                                       handleToggleModuleForRole(selectedRole, module.id)
                                     }
-                                    className="w-4 h-4 text-blue-600 rounded"
+                                    className="w-4 h-4 text-primary rounded"
                                   />
                                   <div className="ml-3 flex-1">
-                                    <div className="font-medium text-gray-900">
+                                    <div className="font-medium text-foreground">
                                       {module.name}
                                     </div>
-                                    <div className="text-sm text-gray-600">
+                                    <div className="text-sm text-muted-foreground">
                                       {module.description}
                                     </div>
                                   </div>
-                                  <div className="text-xs text-gray-500 ml-2">
+                                  <div className="text-xs text-muted-foreground ml-2">
                                     {module.path}
                                   </div>
                                 </label>
@@ -557,12 +559,12 @@ export default function RBACManagementPage() {
                           </div>
 
                           {/* Role Details Card */}
-                          <Card className="p-4 bg-gray-50 mt-6">
-                            <h4 className="font-semibold text-gray-900 mb-2">Role Details</h4>
-                            <p className="text-sm text-gray-700">
+                          <Card className="p-4 bg-muted mt-6">
+                            <h4 className="font-semibold text-foreground mb-2">Role Details</h4>
+                            <p className="text-sm text-foreground">
                               <span className="font-medium">Description:</span> {role?.description || 'N/A'}
                             </p>
-                            <p className="text-sm text-gray-700 mt-2">
+                            <p className="text-sm text-foreground mt-2">
                               <span className="font-medium">Modules Assigned:</span> {(roleModules.get(selectedRole) || []).length} / {modules.length}
                             </p>
                           </Card>
@@ -572,7 +574,7 @@ export default function RBACManagementPage() {
                   </>
                 ) : (
                   <Card className="p-6 text-center">
-                    <p className="text-gray-500">
+                    <p className="text-muted-foreground">
                       Select a role to manage its module access
                     </p>
                   </Card>
@@ -588,7 +590,7 @@ export default function RBACManagementPage() {
             {/* Users List */}
             <div className="lg:col-span-1">
               <Card className="p-4">
-                <h3 className="font-semibold text-gray-900 mb-4">Users</h3>
+                <h3 className="font-semibold text-foreground mb-4">Users</h3>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {users.map((u) => (
                     <button
@@ -596,14 +598,14 @@ export default function RBACManagementPage() {
                       onClick={() => handleSelectUser(u.id)}
                       className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
                         selectedUser === u.id
-                          ? 'bg-blue-100 text-blue-900'
-                          : 'hover:bg-gray-100'
+                          ? 'bg-accent text-accent-foreground'
+                          : 'hover:bg-muted'
                       }`}
                     >
                       <div className="font-medium text-sm">
                         {u.first_name} {u.last_name}
                       </div>
-                      <div className="text-xs text-gray-600">{u.email}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
                     </button>
                   ))}
                 </div>
@@ -632,7 +634,7 @@ export default function RBACManagementPage() {
 
                   <Card className="p-6 mb-4">
                     <div className="flex justify-between items-center mb-6">
-                      <h3 className="font-semibold text-gray-900">
+                      <h3 className="font-semibold text-foreground">
                         Assign Roles
                       </h3>
                       <button
@@ -640,8 +642,8 @@ export default function RBACManagementPage() {
                         disabled={isSelectedUserSuperAdmin}
                         className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
                           isSelectedUserSuperAdmin
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                            : 'bg-destructive/15 text-destructive hover:bg-red-200'
                         }`}
                       >
                         🗑️ Delete User
@@ -651,10 +653,10 @@ export default function RBACManagementPage() {
                       {roles.map((role) => (
                         <label
                           key={role.id}
-                          className={`flex items-center p-3 border border-gray-200 rounded-lg transition-colors ${
+                          className={`flex items-center p-3 border border-border rounded-lg transition-colors ${
                             isSelectedUserSuperAdmin
-                              ? 'bg-gray-50 cursor-not-allowed'
-                              : 'hover:bg-gray-50 cursor-pointer'
+                              ? 'bg-muted cursor-not-allowed'
+                              : 'hover:bg-muted cursor-pointer'
                           }`}
                         >
                           <input
@@ -667,14 +669,14 @@ export default function RBACManagementPage() {
                             className={`w-4 h-4 rounded ${
                               isSelectedUserSuperAdmin
                                 ? 'cursor-not-allowed opacity-50'
-                                : 'text-blue-600 cursor-pointer'
+                                : 'text-primary cursor-pointer'
                             }`}
                           />
                           <div className="ml-3">
-                            <div className="font-medium text-gray-900">
+                            <div className="font-medium text-foreground">
                               {role.name}
                             </div>
-                            <div className="text-sm text-gray-600">
+                            <div className="text-sm text-muted-foreground">
                               {role.description}
                             </div>
                           </div>
@@ -684,8 +686,8 @@ export default function RBACManagementPage() {
                   </Card>
 
                   {/* User Info Card */}
-                  <Card className="p-4 bg-blue-50">
-                    <h4 className="font-semibold text-gray-900 mb-2">User Details</h4>
+                  <Card className="p-4 bg-accent">
+                    <h4 className="font-semibold text-foreground mb-2">User Details</h4>
                     {users
                       .filter(u => u.id === selectedUser)
                       .map(u => (
@@ -700,7 +702,7 @@ export default function RBACManagementPage() {
                 </>
               ) : (
                 <Card className="p-6 text-center">
-                  <p className="text-gray-500">
+                  <p className="text-muted-foreground">
                     Select a user to assign roles or delete
                   </p>
                 </Card>
@@ -713,14 +715,14 @@ export default function RBACManagementPage() {
         {activeTab === 'create-user' && (
           <div>
             <Card className="p-6 max-w-2xl">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Create New User</h2>
+              <h2 className="text-xl font-bold text-foreground mb-6">Create New User</h2>
 
               {createUserMessage && (
                 <div
                   className={`mb-4 p-4 rounded-lg ${
                     createUserMessage.startsWith('✅')
                       ? 'bg-green-50 text-green-800'
-                      : 'bg-red-50 text-red-800'
+                      : 'bg-destructive/10 text-red-800'
                   }`}
                 >
                   {createUserMessage}
@@ -730,7 +732,7 @@ export default function RBACManagementPage() {
               <form onSubmit={handleCreateUser} className="space-y-4">
                 {/* First Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     First Name *
                   </label>
                   <Input
@@ -746,7 +748,7 @@ export default function RBACManagementPage() {
 
                 {/* Last Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Last Name *
                   </label>
                   <Input
@@ -762,7 +764,7 @@ export default function RBACManagementPage() {
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Email *
                   </label>
                   <Input
@@ -778,7 +780,7 @@ export default function RBACManagementPage() {
 
                 {/* Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Password *
                   </label>
                   <Input
@@ -794,7 +796,7 @@ export default function RBACManagementPage() {
 
                 {/* Company */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Company *
                   </label>
                   <select
@@ -803,7 +805,7 @@ export default function RBACManagementPage() {
                       setNewUser({ ...newUser, company_id: e.target.value })
                     }
                     required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="">Select a company</option>
                     {companies.map((company) => (
@@ -816,10 +818,10 @@ export default function RBACManagementPage() {
 
                 {/* Roles */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Assign Roles * (Select at least one)
                   </label>
-                  <div className="space-y-2 border border-gray-200 rounded-lg p-4">
+                  <div className="space-y-2 border border-border rounded-lg p-4">
                     {roles.map((role) => (
                       <label
                         key={role.id}
@@ -843,13 +845,13 @@ export default function RBACManagementPage() {
                               });
                             }
                           }}
-                          className="w-4 h-4 text-blue-600 rounded"
+                          className="w-4 h-4 text-primary rounded"
                         />
                         <div className="ml-3">
-                          <div className="font-medium text-gray-900 text-sm">
+                          <div className="font-medium text-foreground text-sm">
                             {role.name}
                           </div>
-                          <div className="text-xs text-gray-600">
+                          <div className="text-xs text-muted-foreground">
                             {role.description}
                           </div>
                         </div>
@@ -898,8 +900,8 @@ export default function RBACManagementPage() {
               notification.type === 'success'
                 ? 'bg-green-600'
                 : notification.type === 'error'
-                ? 'bg-red-600'
-                : 'bg-blue-600'
+                ? 'bg-destructive'
+                : 'bg-primary'
             }`}
           >
             {notification.message}
